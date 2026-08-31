@@ -972,3 +972,9 @@ td.t-purple{ background: #d9d2e9; color: #4b2273; }
   .stat .value { font-size: 15px; }
   .sv-label { font-size: 13px; }
 }
+
+
+/* ---------- Sync button ---------- */
+.sync-btn.s-synced { color: var(--green); border-color: #bcd9c9; }
+.sync-btn.s-error { color: var(--red); border-color: #e6c2c2; }
+.sync-btn.s-syncing { color: var(--amber); }

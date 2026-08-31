@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { loadState } from "../../lib/data";
+import { syncLoad } from "../../lib/sync";
 import { DOC_LIST } from "../../lib/trackingSpecs";
 import { generateTrackingDocx } from "../../lib/trackingDocs";
 import { generateTrackingPdf } from "../../lib/trackingPdf";
@@ -15,6 +16,11 @@ export default function Documents() {
     const s = loadState();
     setState(s);
     setClassId(s.activeClassId);
+    // refresh from the cloud copy if sync is on
+    syncLoad().then((r) => {
+      setState(r.state);
+      setClassId((id) => id || r.state.activeClassId);
+    });
   }, []);
 
   if (!state) return <p className="page-sub">Loading…</p>;

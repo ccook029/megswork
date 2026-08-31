@@ -20,9 +20,16 @@ A pale-pink teaching dashboard built with Next.js, ready to deploy on Vercel.
   export format (`ID | Name | Grade | Gender | Birth Date`). Rosters cap
   at 30 students and names flow to all three modules automatically.
 
-All gradebook data is stored in the browser's localStorage on the device
-where it's entered — nothing is sent to a server. Use **Export CSV**
-regularly as a backup.
+Gradebook data saves in the browser and, with **☁ Sync** turned on,
+to a small cloud store so phone and laptop stay identical. Sync uses a
+shared sync code (entered once per device) and stores the gradebook in
+Upstash Redis, keyed by a hash of that code.
+
+**One-time sync setup**: in the Vercel dashboard open the project →
+Storage tab → Create Database → "Upstash for Redis" (free plan) →
+connect it to this project (this injects the KV env vars) → redeploy.
+Then in the app, click ☁ Sync, pick a code, and enter the same code on
+each device. Use **Export CSV** now and then as a backup regardless.
 
 ## Run locally
 

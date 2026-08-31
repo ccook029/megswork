@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
-  loadState, saveState, makeStudent, parseRosterRows, parseRosterText,
-  sortRoster, MAX_STUDENTS,
+  loadState, saveState, rawSaveState, makeStudent, parseRosterRows,
+  parseRosterText, sortRoster, MAX_STUDENTS,
 } from "../../lib/data";
+import { getSyncCode, setSyncCode, pushRemote, syncLoad } from "../../lib/sync";
 import {
   GT_GROUPS, GT_PP_IDS, FJ_WEEKS, FC_COLS,
   isValidLevel, levelToPct, effPct, parsePct, calcStudent, fmtPct, pctToLevel,
@@ -24,15 +25,57 @@ export default function Gradebook() {
   // "table" = full class grid; "student" = one-student mobile-friendly view
   const [view, setView] = useState("table");
   const [studentIdx, setStudentIdx] = useState(0);
+  const [sync, setSync] = useState({ status: "off", message: "" });
+  const [showSync, setShowSync] = useState(false);
+  const pushTimer = useRef(null);
+  // Loaded/cloud states must NOT bump updatedAt — only real user edits do,
+  // otherwise a fresh device would claim its seed roster is "newer" than
+  // the cloud copy and overwrite it.
+  const skipStamp = useRef(false);
+  const applyState = (s) => {
+    skipStamp.current = true;
+    setState(s);
+  };
 
   useEffect(() => {
-    setState(loadState());
     // Phones get the one-student view by default
     try {
       if (window.matchMedia("(max-width: 760px)").matches) setView("student");
     } catch {}
+    (async () => {
+      const local = loadState();
+      applyState(local); // paint immediately from this device
+      if (!getSyncCode()) return;
+      // Reconcile with the cloud copy; only apply if it actually differs
+      const r = await syncLoad();
+      if (r.state !== local) applyState(r.state);
+      setSync({ status: r.status, message: r.message || "" });
+    })();
   }, []);
-  useEffect(() => { if (state) saveState(state); }, [state]);
+
+  // Save every change locally; push user edits to the cloud (debounced)
+  useEffect(() => {
+    if (!state) return;
+    if (skipStamp.current) {
+      skipStamp.current = false;
+      rawSaveState(state);
+      return;
+    }
+    const stamped = saveState(state);
+    const code = getSyncCode();
+    if (!code) return;
+    setSync((s) => (s.status === "error" ? s : { status: "syncing", message: "" }));
+    clearTimeout(pushTimer.current);
+    pushTimer.current = setTimeout(async () => {
+      try {
+        await pushRemote(code, stamped);
+        setSync({ status: "synced", message: "" });
+      } catch (e) {
+        setSync({ status: "error", message: e.message });
+      }
+    }, 1200);
+    return () => clearTimeout(pushTimer.current);
+  }, [state]);
 
   if (!state) return <p className="page-sub">Loading your gradebook…</p>;
 
@@ -138,7 +181,7 @@ export default function Gradebook() {
       <p className="page-sub">
         Enter an Ontario level (4+, 3-, R …) in a green row <em>or</em> a percent
         (75 or 0.75) in an orange row — the yellow row converts levels
-        automatically. Everything saves on this device.
+        automatically. Turn on ☁ Sync to share grades across your devices.
       </p>
 
       <div className="toolbar">
@@ -157,6 +200,16 @@ export default function Gradebook() {
         <button className="btn" onClick={() => setShowUpload(true)}>📄 Upload student list</button>
         <button className="btn" onClick={addStudent}>＋ Student</button>
         <button className="btn" onClick={exportCsv}>⬇ Export CSV</button>
+        <button
+          className={`btn sync-btn s-${sync.status}`}
+          title={sync.message || ""}
+          onClick={() => setShowSync(true)}
+        >
+          {sync.status === "off" && "☁ Sync off"}
+          {sync.status === "syncing" && "☁ Syncing…"}
+          {sync.status === "synced" && "☁ Synced ✓"}
+          {sync.status === "error" && "☁ Sync issue"}
+        </button>
       </div>
 
       <div className="tabs">
@@ -195,6 +248,25 @@ export default function Gradebook() {
 
       {showUpload && (
         <UploadModal onClose={() => setShowUpload(false)} onApply={applyRoster} />
+      )}
+
+      {showSync && (
+        <SyncModal
+          sync={sync}
+          onClose={() => setShowSync(false)}
+          onSave={async (code) => {
+            setSyncCode(code);
+            setShowSync(false);
+            if (!code) {
+              setSync({ status: "off", message: "" });
+              return;
+            }
+            setSync({ status: "syncing", message: "" });
+            const r = await syncLoad();
+            if (r.state !== state) applyState(r.state);
+            setSync({ status: r.status, message: r.message || "" });
+          }}
+        />
       )}
     </>
   );
@@ -657,6 +729,52 @@ function StudentView({ cls, results, setCell, idx, setIdx }) {
           )
         )}
       </section>
+    </div>
+  );
+}
+
+// ---------- Sync settings ----------
+
+function SyncModal({ sync, onClose, onSave }) {
+  const [code, setCode] = useState(getSyncCode());
+  const on = !!getSyncCode();
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h2>Sync across devices</h2>
+        <p className="hint">
+          Pick a <strong>sync code</strong> (like a password — at least 6
+          characters) and enter the same code on every device. Grades then
+          save to the cloud automatically and stay identical on your phone
+          and laptop. Keep the code private: it&apos;s the key to the gradebook.
+        </p>
+        <div className="field">
+          <label>Sync code</label>
+          <input
+            type="text"
+            autoFocus
+            value={code}
+            placeholder="e.g. megs-coop-2026"
+            onChange={(e) => setCode(e.target.value.trim())}
+          />
+        </div>
+        {sync.status === "error" && (
+          <p style={{ color: "var(--red)", fontSize: 13 }}>{sync.message}</p>
+        )}
+        <div className="modal-actions">
+          {on && (
+            <button className="btn danger" onClick={() => onSave("")}>Turn off sync</button>
+          )}
+          <button className="btn" onClick={onClose}>Cancel</button>
+          <button
+            className="btn primary"
+            disabled={code.length < 6}
+            onClick={() => onSave(code)}
+          >
+            {on ? "Update & sync" : "Turn on sync"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

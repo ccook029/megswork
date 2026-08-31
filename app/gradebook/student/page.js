@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { loadState } from "../../../lib/data";
+import { syncLoad } from "../../../lib/sync";
 import {
   GT_GROUPS, FJ_WEEKS, FC_COLS, effPct, calcStudent, fmtPct, pctToLevel,
 } from "../../../lib/coop";
@@ -14,15 +15,17 @@ export default function StudentReport() {
 
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("id");
-    const s = loadState();
-    for (const c of s.classes) {
-      const st = c.students.find((x) => x.id === id);
-      if (st) {
-        setData({ cls: c, st, cells: c.cells?.[st.id] || {} });
-        return;
+    (async () => {
+      const { state: s } = await syncLoad();
+      for (const c of s.classes) {
+        const st = c.students.find((x) => x.id === id);
+        if (st) {
+          setData({ cls: c, st, cells: c.cells?.[st.id] || {} });
+          return;
+        }
       }
-    }
-    setData({ missing: true });
+      setData({ missing: true });
+    })();
   }, []);
 
   if (!data) return <p className="page-sub">Loading…</p>;
