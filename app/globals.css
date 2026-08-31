@@ -820,3 +820,155 @@ td.t-green { background: #e2efda; color: #375623; }
 td.t-gold  { background: #fff2cc; color: #7f6000; }
 td.t-red   { background: #fce4d6; color: #843c0c; }
 td.t-purple{ background: #d9d2e9; color: #4b2273; }
+
+/* ---------- One-student view (mobile entry) ---------- */
+
+.view-toggle {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.name-link { color: inherit; text-decoration: underline dotted var(--pink-500); }
+.name-link:hover { color: var(--rose-700); }
+
+.sv { max-width: 640px; }
+
+.sv-nav {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.sv-nav select { flex: 1; min-width: 0; font-size: 16px; }
+
+.sv-stats .stat { flex: 1; min-width: 110px; }
+.sv-stats .value { font-size: 16px; }
+
+.sv-hint { margin: 0 0 14px; }
+
+.sv-section {
+  background: var(--white);
+  border: 1px solid var(--pink-200);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+
+.sv-section h3 {
+  margin: 0;
+  padding: 10px 14px;
+  font-size: 14px;
+  color: #fff;
+  background: #4472c4;
+}
+.sv-section.t-green h3 { background: #548235; }
+.sv-section.t-gold h3 { background: #bf8f00; }
+.sv-section.t-red h3 { background: #c00000; }
+.sv-section.t-purple h3 { background: #7030a0; }
+.sv-section.t-black h3 { background: #3a3a3a; }
+
+.sv-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--pink-150);
+}
+.sv-row:nth-child(even) { background: var(--pink-50); }
+
+.sv-label { flex: 1; font-size: 14px; min-width: 0; }
+
+.sv-inputs { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+.sv-inputs input.entry {
+  width: 64px;
+  height: 40px;
+  font-size: 16px; /* prevents iOS zoom-on-focus */
+  text-align: center;
+  border: 1px solid var(--pink-300);
+  border-radius: 8px;
+  background: var(--white);
+}
+.sv-inputs input.entry:first-child { background: #e2efda; }
+.sv-inputs input.entry:nth-child(2) { background: #fce4d6; }
+.sv-inputs input.entry.bad { color: #c00000; font-weight: 700; }
+
+.sv-eff {
+  min-width: 58px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--rose-800);
+}
+.sv-eff.auto { color: #555; }
+
+/* ---------- Student grade report page ---------- */
+
+.report { max-width: 780px; }
+
+.report-head { margin-bottom: 16px; }
+.report-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: #75725e; }
+.report-head h1 {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 30px;
+  margin: 2px 0;
+  color: #1a1a1a;
+}
+.report-sub {
+  color: #56544a;
+  font-size: 13.5px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #b3b09b;
+}
+
+.report-stats { margin-top: 14px; }
+
+.report-h2 {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 19px;
+  color: #262626;
+  margin: 22px 0 8px;
+}
+
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  background: #fff;
+}
+.report-table th, .report-table td {
+  border: 1px solid #c9c6b8;
+  padding: 6px 10px;
+  text-align: left;
+}
+.report-table th { background: #dddbcb; color: #262626; }
+.report-table tbody tr:nth-child(even) { background: #f3f2ea; }
+.report-table td.c { text-align: center; }
+.report-table .muted { color: #77745f; font-size: 12px; }
+.report-table tfoot td { font-weight: 700; background: #f3f2ea; }
+.report-table tr.grand td { background: #b3b09b; color: #1a1a1a; }
+
+@media print {
+  .sidebar, .toolbar, .no-print { display: none !important; }
+  .main { padding: 0 !important; }
+  body { background: #fff; }
+  .stat { box-shadow: none; border: 1px solid #c9c6b8; }
+}
+
+/* ---------- Mobile polish ---------- */
+
+@media (max-width: 760px) {
+  .tabs { gap: 4px; }
+  .tab { padding: 7px 10px; font-size: 12px; }
+  .view-toggle { margin-left: 0; width: 100%; }
+  .toolbar .btn { font-size: 12.5px; padding: 7px 10px; }
+  .gb-wrap { max-height: calc(100vh - 190px); }
+  .stats { gap: 8px; }
+  .stat { padding: 8px 12px; min-width: 96px; }
+  .stat .value { font-size: 15px; }
+  .sv-label { font-size: 13px; }
+}

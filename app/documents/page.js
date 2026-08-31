@@ -82,7 +82,7 @@ export default function Documents() {
               <span className="doc-name">Complete Workbook — all eight documents in one</span>
               <span className="doc-desc">
                 Cover page plus every template below, populated with {cls.students.length} student
-                {cls.students.length === 1 ? "" : "s"} from “{cls.name}”
+                {cls.students.length === 1 ? "" : "s"}
               </span>
             </span>
             <Buttons kind="workbook" />

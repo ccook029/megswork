@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import {
   loadState, saveState, makeStudent, parseRosterRows, parseRosterText,
   sortRoster, MAX_STUDENTS,
@@ -11,17 +12,26 @@ import {
 } from "../../lib/coop";
 
 const TABS = [
-  { key: "gt", label: "Grade Tracker" },
+  { key: "gt", label: "Mid Term Marking Sheet" },
   { key: "fj", label: "Final Journals" },
-  { key: "fc", label: "Final Co-op Marking Sheet" },
+  { key: "fc", label: "Final Marking Sheet" },
 ];
 
 export default function Gradebook() {
   const [state, setState] = useState(null);
   const [tab, setTab] = useState("gt");
   const [showUpload, setShowUpload] = useState(false);
+  // "table" = full class grid; "student" = one-student mobile-friendly view
+  const [view, setView] = useState("table");
+  const [studentIdx, setStudentIdx] = useState(0);
 
-  useEffect(() => { setState(loadState()); }, []);
+  useEffect(() => {
+    setState(loadState());
+    // Phones get the one-student view by default
+    try {
+      if (window.matchMedia("(max-width: 760px)").matches) setView("student");
+    } catch {}
+  }, []);
   useEffect(() => { if (state) saveState(state); }, [state]);
 
   if (!state) return <p className="page-sub">Loading your gradebook…</p>;
@@ -159,10 +169,22 @@ export default function Gradebook() {
             {t.label}
           </button>
         ))}
+        <span className="view-toggle">
+          <button className={`btn small${view === "table" ? " primary" : ""}`} onClick={() => setView("table")}>Class grid</button>
+          <button className={`btn small${view === "student" ? " primary" : ""}`} onClick={() => setView("student")}>One student</button>
+        </span>
       </div>
 
       {cls.students.length === 0 ? (
         <div className="card">No students yet — upload a student list or add one by hand.</div>
+      ) : view === "student" ? (
+        <StudentView
+          cls={cls}
+          results={results}
+          setCell={setCell}
+          idx={Math.min(studentIdx, cls.students.length - 1)}
+          setIdx={setStudentIdx}
+        />
       ) : tab === "gt" ? (
         <GradeTracker cls={cls} results={results} setCell={setCell} removeStudent={removeStudent} />
       ) : tab === "fj" ? (
@@ -255,8 +277,8 @@ function GradeTracker({ cls, results, setCell, removeStudent }) {
   return (
     <>
       <p className="hint" style={{ margin: "0 0 8px" }}>
-        Tip: click a section header (▾ Unit 1, Quizzes, Weeks &amp; Hours …)
-        to collapse it down to a single section-average column.
+        Tip: click a section header (▾ Unit 1, Quizzes, Weeks &amp; Hours …) to collapse
+        it. Click a student&apos;s name for their printable grade report.
       </p>
       <div className="gb-wrap">
         <table className="coop">
@@ -268,7 +290,7 @@ function GradeTracker({ cls, results, setCell, removeStudent }) {
               <th className="h-red" colSpan={span(groups[3])}>HOURS &amp; JOURNALS (30%)</th>
               <th className="h-purple" colSpan={1}>LEARNING PLAN (5%)</th>
               <th className="h-purple" colSpan={2} rowSpan={2}>Averages</th>
-              <th className="h-black" rowSpan={3}>Final Grade</th>
+              <th className="h-black" rowSpan={3}>Midterm Mark</th>
               <th rowSpan={3} className="x-col"></th>
             </tr>
             <tr className="hr2">
@@ -346,6 +368,7 @@ function GradeTracker({ cls, results, setCell, removeStudent }) {
                   key={st.id}
                   name={st.name}
                   band={band}
+                  href={`/gradebook/student?id=${st.id}`}
                   onRemove={() => removeStudent(st)}
                   rows={[
                     {
@@ -379,14 +402,20 @@ function GradeTracker({ cls, results, setCell, removeStudent }) {
 }
 
 // Renders one student's 2-3 rows with merged name + row-type labels
-function FragmentRows({ name, band, rows, trailing, onRemove }) {
+function FragmentRows({ name, band, rows, trailing, onRemove, href }) {
   const labels = { lv: "Level", auto: "% from level", pc: "% direct" };
   return (
     <>
       {rows.map((row, i) => (
         <tr key={row.type}>
           {i === 0 && (
-            <td rowSpan={rows.length} className={`name-col${band}`}>{name}</td>
+            <td rowSpan={rows.length} className={`name-col${band}`}>
+              {href ? (
+                <Link href={href} className="name-link" title="Open printable grade report">{name}</Link>
+              ) : (
+                name
+              )}
+            </td>
           )}
           <td className={`rowtype c-${row.type}`}>{labels[row.type]}</td>
           {row.cells}
@@ -432,6 +461,7 @@ function FinalJournals({ cls, results, setCell }) {
                 key={st.id}
                 name={st.name}
                 band={band}
+                href={`/gradebook/student?id=${st.id}`}
                 rows={[
                   {
                     type: "lv",
@@ -505,6 +535,7 @@ function FinalCoop({ cls, results, setCell }) {
                 key={st.id}
                 name={st.name}
                 band={band}
+                href={`/gradebook/student?id=${st.id}`}
                 rows={[
                   {
                     type: "lv",
@@ -548,6 +579,84 @@ function FinalCoop({ cls, results, setCell }) {
           })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+// ---------- One-student view (mobile-friendly entry) ----------
+
+function StudentView({ cls, results, setCell, idx, setIdx }) {
+  const st = cls.students[idx];
+  if (!st) return null;
+  const r = results[st.id];
+  const cellFor = (id) => cls.cells?.[st.id]?.[id];
+
+  const EntryRow = ({ id, label }) => {
+    const e = effPct(cellFor(id));
+    return (
+      <div className="sv-row">
+        <span className="sv-label">{label}</span>
+        <span className="sv-inputs">
+          <LevelInput cell={cellFor(id)} onChange={(v) => setCell(st.id, id, "lv", v)} />
+          <PctInput cell={cellFor(id)} onChange={(v) => setCell(st.id, id, "pc", v)} />
+          <span className="sv-eff">{e === null ? "—" : fmtPct(e)}</span>
+        </span>
+      </div>
+    );
+  };
+
+  const AutoRow = ({ label, value }) => (
+    <div className="sv-row">
+      <span className="sv-label">{label}</span>
+      <span className="sv-inputs"><span className="sv-eff auto">{value}</span></span>
+    </div>
+  );
+
+  return (
+    <div className="sv">
+      <div className="sv-nav">
+        <button className="btn" onClick={() => setIdx(Math.max(0, idx - 1))} disabled={idx === 0}>◀</button>
+        <select value={st.id} onChange={(e) => setIdx(cls.students.findIndex((x) => x.id === e.target.value))}>
+          {cls.students.map((x) => (
+            <option key={x.id} value={x.id}>{x.name}</option>
+          ))}
+        </select>
+        <button className="btn" onClick={() => setIdx(Math.min(cls.students.length - 1, idx + 1))} disabled={idx === cls.students.length - 1}>▶</button>
+        <Link className="btn" href={`/gradebook/student?id=${st.id}`}>Report</Link>
+      </div>
+
+      <div className="stats sv-stats">
+        <div className="stat"><div className="label">Midterm Mark</div><div className="value">{r.gtFinal === null ? "—" : `${fmtPct(r.gtFinal)} · ${pctToLevel(r.gtFinal)}`}</div></div>
+        <div className="stat"><div className="label">Journals Avg</div><div className="value">{r.fjAvg === null ? "—" : `${fmtPct(r.fjAvg)} · ${r.fjLevel}`}</div></div>
+        <div className="stat"><div className="label">Final Mark</div><div className="value">{r.fcFinal === null ? "—" : `${fmtPct(r.fcFinal)} · ${r.fcLevel}`}</div></div>
+      </div>
+
+      <p className="hint sv-hint">Type a <strong>level</strong> (4+, 3, R …) in the first box <em>or</em> a <strong>percent</strong> in the second — the value on the right is what counts.</p>
+
+      {GT_GROUPS.map((g) => (
+        <section key={g.key} className={`sv-section t-${g.theme}`}>
+          <h3>{g.label}</h3>
+          {g.cols.map((label, i) => (
+            <EntryRow key={i} id={`gt.${g.key}.${i}`} label={label} />
+          ))}
+        </section>
+      ))}
+      <section className="sv-section t-blue">
+        <h3>Final Journals — Weeks 7–15</h3>
+        {FJ_WEEKS.map((w) => (
+          <EntryRow key={w} id={`fj.${w}`} label={`Week ${w}`} />
+        ))}
+      </section>
+      <section className="sv-section t-black">
+        <h3>Final Marking Sheet</h3>
+        {FC_COLS.map((c) =>
+          c.auto ? (
+            <AutoRow key={c.id} label={`${c.label} (${Math.round(c.weight * 100)}%) — auto`} value={r.fcParts[c.id] === null ? "—" : fmtPct(r.fcParts[c.id])} />
+          ) : (
+            <EntryRow key={c.id} id={c.id} label={`${c.label} (${Math.round(c.weight * 100)}%)`} />
+          )
+        )}
+      </section>
     </div>
   );
 }
