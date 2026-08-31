@@ -230,87 +230,151 @@ function ResultCell({ pct, rows = 3, cls = "" }) {
 
 function GradeTracker({ cls, results, setCell, removeStudent }) {
   const groups = GT_GROUPS;
-  const nCols = groups.reduce((a, g) => a + g.cols.length, 0);
+  // Which sections are collapsed to a single "section average" column
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      return JSON.parse(localStorage.getItem("megs-gt-collapsed")) || {};
+    } catch {
+      return {};
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("megs-gt-collapsed", JSON.stringify(collapsed));
+    } catch {}
+  }, [collapsed]);
+
+  const isC = (k) => !!collapsed[k] && k !== "lp";
+  const toggle = (k) =>
+    setCollapsed((c) => ({ ...c, [k]: !c[k] }));
+  const span = (g) => (isC(g.key) ? 1 : g.cols.length);
+  const ppSpan = groups.slice(0, 3).reduce((a, g) => a + span(g), 0);
+  const arrow = (k) => (isC(k) ? "▸" : "▾");
+
   return (
-    <div className="gb-wrap">
-      <table className="coop">
-        <thead>
-          <tr>
-            <th className="name-col" rowSpan={3}>Student</th>
-            <th className="rowtype-col" rowSpan={3}></th>
-            <th className="h-blue" colSpan={GT_PP_IDS.length}>PRE-PLACEMENT (65%)</th>
-            <th className="h-red" colSpan={8}>HOURS &amp; JOURNALS (30%)</th>
-            <th className="h-purple" colSpan={1}>LEARNING PLAN (5%)</th>
-            <th className="h-purple" colSpan={2} rowSpan={2}>Averages</th>
-            <th className="h-black" rowSpan={3}>Final Grade</th>
-            <th rowSpan={3} className="x-col"></th>
-          </tr>
-          <tr>
-            {groups.slice(0, 3).map((g) => (
-              <th key={g.key} className={`h-${g.theme}-lt`} colSpan={g.cols.length}>{g.label}</th>
-            ))}
-            <th className="h-red-lt" colSpan={8}>Level, hours or %</th>
-            <th className="h-purple-lt" colSpan={1}></th>
-          </tr>
-          <tr>
-            {groups.map((g) =>
-              g.cols.map((label, i) => (
-                <th key={`${g.key}.${i}`} className={`sub h-${g.theme}-lt`}>{label}</th>
-              ))
-            )}
-            <th className="sub h-purple-lt">Pre-Placement Avg</th>
-            <th className="sub h-purple-lt">H&amp;J Avg</th>
-          </tr>
-        </thead>
-        <tbody>
-          {cls.students.map((st, idx) => {
-            const r = results[st.id];
-            const band = idx % 2 === 1 ? " band" : "";
-            const colIds = groups.flatMap((g) => g.cols.map((_, i) => `gt.${g.key}.${i}`));
-            const cellFor = (id) => cls.cells?.[st.id]?.[id];
-            return (
-              <FragmentRows
-                key={st.id}
-                name={st.name}
-                band={band}
-                onRemove={() => removeStudent(st)}
-                rows={[
-                  {
-                    type: "lv",
-                    cells: colIds.map((id) => (
-                      <td key={id} className="c-lv">
-                        <LevelInput cell={cellFor(id)} onChange={(v) => setCell(st.id, id, "lv", v)} />
-                      </td>
-                    )),
-                    trailing: (
-                      <>
-                        <ResultCell pct={r.pp} cls="r-purple" />
-                        <ResultCell pct={r.hj} cls="r-purple" />
-                        <ResultCell pct={r.gtFinal} cls="r-black" />
-                      </>
-                    ),
-                  },
-                  {
-                    type: "auto",
-                    cells: colIds.map((id) => (
-                      <td key={id} className="c-auto"><AutoCell cell={cellFor(id)} /></td>
-                    )),
-                  },
-                  {
-                    type: "pc",
-                    cells: colIds.map((id) => (
-                      <td key={id} className="c-pc">
-                        <PctInput cell={cellFor(id)} onChange={(v) => setCell(st.id, id, "pc", v)} />
-                      </td>
-                    )),
-                  },
-                ]}
-              />
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+    <>
+      <p className="hint" style={{ margin: "0 0 8px" }}>
+        Tip: click a section header (▾ Unit 1, Quizzes, Weeks &amp; Hours …)
+        to collapse it down to a single section-average column.
+      </p>
+      <div className="gb-wrap">
+        <table className="coop">
+          <thead>
+            <tr className="hr1">
+              <th className="name-col" rowSpan={3}>Student</th>
+              <th className="rowtype-col" rowSpan={3}></th>
+              <th className="h-blue" colSpan={ppSpan}>PRE-PLACEMENT (65%)</th>
+              <th className="h-red" colSpan={span(groups[3])}>HOURS &amp; JOURNALS (30%)</th>
+              <th className="h-purple" colSpan={1}>LEARNING PLAN (5%)</th>
+              <th className="h-purple" colSpan={2} rowSpan={2}>Averages</th>
+              <th className="h-black" rowSpan={3}>Final Grade</th>
+              <th rowSpan={3} className="x-col"></th>
+            </tr>
+            <tr className="hr2">
+              {groups.slice(0, 3).map((g) => (
+                <th
+                  key={g.key}
+                  className={`h-${g.theme}-lt toggle`}
+                  colSpan={span(g)}
+                  onClick={() => toggle(g.key)}
+                  title="Click to expand / collapse this section"
+                >
+                  {arrow(g.key)} {g.label}
+                  {isC(g.key) ? ` (${g.cols.length})` : ""}
+                </th>
+              ))}
+              <th
+                className="h-red-lt toggle"
+                colSpan={span(groups[3])}
+                onClick={() => toggle("hj")}
+                title="Click to expand / collapse this section"
+              >
+                {arrow("hj")} Weeks &amp; Hours{isC("hj") ? " (8)" : ""}
+              </th>
+              <th className="h-purple-lt" colSpan={1}></th>
+            </tr>
+            <tr className="hr3">
+              {groups.map((g) =>
+                isC(g.key) ? (
+                  <th key={g.key} className={`sub h-${g.theme}-lt`}>Section Avg</th>
+                ) : (
+                  g.cols.map((label, i) => (
+                    <th key={`${g.key}.${i}`} className={`sub h-${g.theme}-lt`}>{label}</th>
+                  ))
+                )
+              )}
+              <th className="sub h-purple-lt">Pre-Placement Avg</th>
+              <th className="sub h-purple-lt">H&amp;J Avg</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cls.students.map((st, idx) => {
+              const r = results[st.id];
+              const band = idx % 2 === 1 ? " band" : "";
+              const cellFor = (id) => cls.cells?.[st.id]?.[id];
+              // Cells for one group on one row; a collapsed group renders a
+              // single merged section-average cell on the first row only.
+              const groupCells = (g, rowType) => {
+                const ids = g.cols.map((_, i) => `gt.${g.key}.${i}`);
+                if (isC(g.key)) {
+                  if (rowType !== "lv") return [];
+                  const vals = ids.map((id) => effPct(cellFor(id))).filter((v) => v !== null);
+                  const gAvg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+                  return [
+                    <td key={g.key} rowSpan={3} className={`c-collapsed t-${g.theme}`}>
+                      {gAvg === null ? "—" : fmtPct(gAvg)}
+                    </td>,
+                  ];
+                }
+                return ids.map((id) =>
+                  rowType === "lv" ? (
+                    <td key={id} className="c-lv">
+                      <LevelInput cell={cellFor(id)} onChange={(v) => setCell(st.id, id, "lv", v)} />
+                    </td>
+                  ) : rowType === "auto" ? (
+                    <td key={id} className="c-auto"><AutoCell cell={cellFor(id)} /></td>
+                  ) : (
+                    <td key={id} className="c-pc">
+                      <PctInput cell={cellFor(id)} onChange={(v) => setCell(st.id, id, "pc", v)} />
+                    </td>
+                  )
+                );
+              };
+              return (
+                <FragmentRows
+                  key={st.id}
+                  name={st.name}
+                  band={band}
+                  onRemove={() => removeStudent(st)}
+                  rows={[
+                    {
+                      type: "lv",
+                      cells: groups.flatMap((g) => groupCells(g, "lv")),
+                      trailing: (
+                        <>
+                          <ResultCell pct={r.pp} cls="r-purple" />
+                          <ResultCell pct={r.hj} cls="r-purple" />
+                          <ResultCell pct={r.gtFinal} cls="r-black" />
+                        </>
+                      ),
+                    },
+                    {
+                      type: "auto",
+                      cells: groups.flatMap((g) => groupCells(g, "auto")),
+                    },
+                    {
+                      type: "pc",
+                      cells: groups.flatMap((g) => groupCells(g, "pc")),
+                    },
+                  ]}
+                />
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 
@@ -345,14 +409,14 @@ function FinalJournals({ cls, results, setCell }) {
     <div className="gb-wrap">
       <table className="coop">
         <thead>
-          <tr>
+          <tr className="hrA">
             <th className="name-col" rowSpan={2}>Student</th>
             <th className="rowtype-col" rowSpan={2}></th>
             <th className="h-blue" colSpan={FJ_WEEKS.length}>FINAL JOURNALS — WEEKS 7–15</th>
             <th className="h-purple" rowSpan={2}>Average Level</th>
             <th className="h-purple" rowSpan={2}>Average %</th>
           </tr>
-          <tr>
+          <tr className="hrB">
             {FJ_WEEKS.map((w) => (
               <th key={w} className="sub h-blue-lt">Week {w}</th>
             ))}
@@ -411,7 +475,7 @@ function FinalCoop({ cls, results, setCell }) {
     <div className="gb-wrap">
       <table className="coop">
         <thead>
-          <tr>
+          <tr className="hrA">
             <th className="name-col" rowSpan={2}>Student</th>
             <th className="rowtype-col" rowSpan={2}></th>
             {FC_COLS.map((c) => (
@@ -423,7 +487,7 @@ function FinalCoop({ cls, results, setCell }) {
             <th className="h-black" rowSpan={2}>Final Level</th>
             <th className="h-black" rowSpan={2}>Final %</th>
           </tr>
-          <tr>
+          <tr className="hrB">
             {FC_COLS.map((c) => (
               <th key={c.id} className={`sub ${c.auto ? "h-grey" : "h-blue-lt"}`}>
                 {Math.round(c.weight * 100)}%

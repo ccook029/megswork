@@ -279,12 +279,24 @@ select:focus {
 }
 
 .gb-wrap {
-  overflow-x: auto;
+  overflow: auto;
+  max-height: calc(100vh - 235px);
   background: var(--white);
   border: 1px solid var(--pink-200);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
 }
+
+/* Chunky, always-visible scrollbars so it's obvious you can pan */
+.gb-wrap::-webkit-scrollbar { height: 13px; width: 13px; }
+.gb-wrap::-webkit-scrollbar-track { background: var(--pink-100); border-radius: 8px; }
+.gb-wrap::-webkit-scrollbar-thumb {
+  background: var(--pink-400);
+  border-radius: 8px;
+  border: 3px solid var(--pink-100);
+}
+.gb-wrap::-webkit-scrollbar-thumb:hover { background: var(--pink-500); }
+.gb-wrap { scrollbar-color: var(--pink-400) var(--pink-100); }
 
 table.gb {
   border-collapse: separate;
@@ -775,3 +787,28 @@ h2.doc-group {
   padding: 5px 12px;
   background: var(--white);
 }
+
+
+/* Sticky header rows inside the scroll area */
+table.coop thead tr.hr1 th { top: 0; height: 32px; }
+table.coop thead tr.hr2 th { top: 32px; height: 30px; }
+table.coop thead tr.hr3 th { top: 62px; }
+table.coop thead tr.hrA th { top: 0; height: 66px; }
+table.coop thead tr.hrB th { top: 66px; }
+
+/* Collapsible section headers */
+th.toggle { cursor: pointer; user-select: none; }
+th.toggle:hover { filter: brightness(0.95); }
+
+/* Collapsed section: one merged section-average cell per student */
+td.c-collapsed {
+  text-align: center;
+  vertical-align: middle;
+  font-weight: 700;
+  min-width: 84px;
+}
+td.t-blue  { background: #d9e2f3; color: #2b4a86; }
+td.t-green { background: #e2efda; color: #375623; }
+td.t-gold  { background: #fff2cc; color: #7f6000; }
+td.t-red   { background: #fce4d6; color: #843c0c; }
+td.t-purple{ background: #d9d2e9; color: #4b2273; }
