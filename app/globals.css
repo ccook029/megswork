@@ -596,6 +596,7 @@ table.coop thead th {
   position: sticky;
   top: 0;
   z-index: 2;
+  vertical-align: top;
 }
 
 table.coop thead th.sub {
@@ -604,7 +605,7 @@ table.coop thead th.sub {
   white-space: normal;
   min-width: 74px;
   max-width: 110px;
-  vertical-align: bottom;
+  vertical-align: top;
 }
 
 /* Header themes (match the Excel workbook) */
