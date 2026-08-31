@@ -16,6 +16,14 @@ export default function Home() {
             to build your roster automatically.
           </p>
         </Link>
+        <Link href="/documents" className="tool-card">
+          <span className="emoji">📁</span>
+          <h3>Documents</h3>
+          <p>
+            All your tracking sheets and templates in one place — open or
+            download them from any device.
+          </p>
+        </Link>
         <div className="tool-card soon">
           <span className="emoji">🗓️</span>
           <h3>Lesson Planner</h3>
