@@ -2,7 +2,7 @@ import "./globals.css";
 import Nav from "./nav";
 
 export const metadata = {
-  title: "Megan's Teaching Dashboard",
+  title: "Meagan's Teaching Dashboard",
   description: "Gradebook and classroom tools",
 };
 

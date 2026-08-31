@@ -776,6 +776,13 @@ h2.doc-group {
   font-size: 12.5px;
 }
 
+.doc-buttons {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: flex;
+  gap: 8px;
+}
+
 .doc-dl {
   margin-left: auto;
   flex-shrink: 0;

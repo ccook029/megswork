@@ -1,4 +1,4 @@
-# Megan's Teaching Dashboard
+# Meagan's Teaching Dashboard
 
 A pale-pink teaching dashboard built with Next.js, ready to deploy on Vercel.
 

@@ -9,17 +9,14 @@ const links = [
   { href: "/documents", label: "Documents", emoji: "📁" },
 ];
 
-const comingSoon = [
-  { label: "Lesson Planner", emoji: "🗓️" },
-  { label: "Seating Charts", emoji: "🪑" },
-];
+const comingSoon = [];
 
 export default function Nav() {
   const pathname = usePathname();
   return (
     <aside className="sidebar">
       <h1 className="brand">
-        Megan&apos;s Teaching Dashboard
+        Meagan&apos;s Teaching Dashboard
         <small>John Paul II CSS</small>
       </h1>
       {links.map((l) => (
