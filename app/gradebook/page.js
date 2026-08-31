@@ -2,64 +2,58 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  loadState,
-  saveState,
-  makeStudent,
-  letterFor,
-  studentAverage,
-  assignmentAverage,
-  parseRosterRows,
-  parseRosterText,
-  sortRoster,
+  loadState, saveState, makeStudent, parseRosterRows, parseRosterText,
+  sortRoster, MAX_STUDENTS,
 } from "../../lib/data";
+import {
+  GT_GROUPS, GT_PP_IDS, FJ_WEEKS, FC_COLS,
+  isValidLevel, levelToPct, effPct, parsePct, calcStudent, fmtPct, pctToLevel,
+} from "../../lib/coop";
+
+const TABS = [
+  { key: "gt", label: "Grade Tracker" },
+  { key: "fj", label: "Final Journals" },
+  { key: "fc", label: "Final Co-op Marking Sheet" },
+];
 
 export default function Gradebook() {
   const [state, setState] = useState(null);
+  const [tab, setTab] = useState("gt");
   const [showUpload, setShowUpload] = useState(false);
-  const [showAssign, setShowAssign] = useState(false);
 
-  useEffect(() => {
-    setState(loadState());
-  }, []);
+  useEffect(() => { setState(loadState()); }, []);
+  useEffect(() => { if (state) saveState(state); }, [state]);
 
-  useEffect(() => {
-    if (state) saveState(state);
-  }, [state]);
+  if (!state) return <p className="page-sub">Loading your gradebook…</p>;
 
-  if (!state) {
-    return <p className="page-sub">Loading your gradebook…</p>;
-  }
+  const cls = state.classes.find((c) => c.id === state.activeClassId) || state.classes[0];
 
-  const cls =
-    state.classes.find((c) => c.id === state.activeClassId) || state.classes[0];
-
-  const updateClass = (updater) => {
+  const updateClass = (updater) =>
     setState((s) => ({
       ...s,
       classes: s.classes.map((c) => (c.id === cls.id ? updater(c) : c)),
     }));
-  };
 
-  const setScore = (studentId, assignmentId, raw) => {
-    updateClass((c) => ({
-      ...c,
-      scores: {
-        ...c.scores,
-        [studentId]: { ...(c.scores[studentId] || {}), [assignmentId]: raw },
-      },
-    }));
-  };
+  // Entering a level clears the direct %, and vice versa — only one
+  // of the two ever holds data for an assignment (mirrors the workbook).
+  const setCell = (studentId, colId, field, value) =>
+    updateClass((c) => {
+      const forStudent = { ...(c.cells?.[studentId] || {}) };
+      const prev = forStudent[colId] || {};
+      const next = { ...prev, [field]: value };
+      if (value !== "" && field === "lv") next.pc = "";
+      if (value !== "" && field === "pc") next.lv = "";
+      forStudent[colId] = next;
+      return { ...c, cells: { ...c.cells, [studentId]: forStudent } };
+    });
 
   const addClass = () => {
-    const name = prompt("Name for the new class (e.g. Period 2 — Religion):");
+    const name = prompt("Name for the new class (e.g. Coop AM 2026-27):");
     if (!name) return;
     const id = Math.random().toString(36).slice(2, 10);
     setState((s) => ({
       ...s,
-      classes: [
-        ...s.classes,
-        { id, name, students: [], assignments: [], scores: {} },
-      ],
+      classes: [...s.classes, { id, name, students: [], cells: {} }],
       activeClassId: id,
     }));
   };
@@ -70,12 +64,8 @@ export default function Gradebook() {
   };
 
   const deleteClass = () => {
-    if (state.classes.length === 1) {
-      alert("You need at least one class.");
-      return;
-    }
-    if (!confirm(`Delete "${cls.name}" and all its grades? This can't be undone.`))
-      return;
+    if (state.classes.length === 1) return alert("You need at least one class.");
+    if (!confirm(`Delete "${cls.name}" and all its grades? This can't be undone.`)) return;
     setState((s) => {
       const classes = s.classes.filter((c) => c.id !== cls.id);
       return { ...s, classes, activeClassId: classes[0].id };
@@ -83,328 +73,470 @@ export default function Gradebook() {
   };
 
   const addStudent = () => {
+    if (cls.students.length >= MAX_STUDENTS)
+      return alert(`This class is at the ${MAX_STUDENTS}-student limit.`);
     const name = prompt('Student name (e.g. "Smith, Jordan"):');
     if (!name) return;
-    updateClass((c) => ({
-      ...c,
-      students: sortRoster([...c.students, makeStudent(name)]),
-    }));
+    updateClass((c) => ({ ...c, students: sortRoster([...c.students, makeStudent(name)]) }));
   };
 
   const removeStudent = (st) => {
-    if (!confirm(`Remove ${st.name} and their grades from this class?`)) return;
+    if (!confirm(`Remove ${st.name} and all their grades?`)) return;
     updateClass((c) => {
-      const scores = { ...c.scores };
-      delete scores[st.id];
-      return {
-        ...c,
-        students: c.students.filter((x) => x.id !== st.id),
-        scores,
-      };
+      const cells = { ...c.cells };
+      delete cells[st.id];
+      return { ...c, students: c.students.filter((x) => x.id !== st.id), cells };
     });
   };
 
-  const removeAssignment = (a) => {
-    if (!confirm(`Delete "${a.name}" and all its scores?`)) return;
+  const applyRoster = (students, mode) => {
     updateClass((c) => {
-      const scores = {};
-      for (const [sid, byAssign] of Object.entries(c.scores)) {
-        const copy = { ...byAssign };
-        delete copy[a.id];
-        scores[sid] = copy;
+      if (mode === "replace") {
+        return { ...c, students: sortRoster(students).slice(0, MAX_STUDENTS), cells: {} };
       }
+      const existing = new Set(c.students.map((s) => s.name.toLowerCase()));
+      const added = students.filter((s) => !existing.has(s.name.toLowerCase()));
       return {
         ...c,
-        assignments: c.assignments.filter((x) => x.id !== a.id),
-        scores,
+        students: sortRoster([...c.students, ...added]).slice(0, MAX_STUDENTS),
       };
     });
+    setShowUpload(false);
   };
 
   const exportCsv = () => {
-    const header = [
-      "Student ID",
-      "Name",
-      "Grade",
-      ...cls.assignments.map((a) => `${a.name} (/${a.points})`),
-      "Average %",
-      "Letter",
-    ];
-    const lines = [header];
-    for (const st of cls.students) {
-      const avg = studentAverage(cls, st.id);
-      lines.push([
-        st.sid,
-        st.name,
-        st.grade,
-        ...cls.assignments.map((a) => cls.scores?.[st.id]?.[a.id] ?? ""),
-        avg === null ? "" : avg.toFixed(1),
-        avg === null ? "" : letterFor(avg),
-      ]);
-    }
-    const csv = lines
-      .map((row) =>
-        row.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")
-      )
+    const rows = buildCsv(cls, tab);
+    const csv = rows
+      .map((r) => r.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))
       .join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${cls.name.replace(/[^\w\- ]+/g, "")} gradebook.csv`;
+    a.download = `${cls.name} - ${TABS.find((t) => t.key === tab).label}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  const classAvg = (() => {
-    const vals = cls.students
-      .map((st) => studentAverage(cls, st.id))
-      .filter((v) => v !== null);
-    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
-  })();
+  const results = Object.fromEntries(
+    cls.students.map((st) => [st.id, calcStudent(cls.cells?.[st.id])])
+  );
 
   return (
     <>
       <h1 className="page-title">Gradebook</h1>
       <p className="page-sub">
-        Marks save automatically on this device. Blank cells don&apos;t count
-        against a student&apos;s average.
+        Enter an Ontario level (4+, 3-, R …) in a green row <em>or</em> a percent
+        (75 or 0.75) in an orange row — the yellow row converts levels
+        automatically. Everything saves on this device.
       </p>
 
       <div className="toolbar">
         <select
           value={cls.id}
-          onChange={(e) =>
-            setState((s) => ({ ...s, activeClassId: e.target.value }))
-          }
+          onChange={(e) => setState((s) => ({ ...s, activeClassId: e.target.value }))}
         >
           {state.classes.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
+            <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </select>
         <button className="btn small" onClick={addClass}>＋ Class</button>
         <button className="btn small" onClick={renameClass}>Rename</button>
         <button className="btn small danger" onClick={deleteClass}>Delete</button>
         <span className="spacer" />
-        <button className="btn" onClick={() => setShowUpload(true)}>
-          📄 Upload student list
-        </button>
+        <button className="btn" onClick={() => setShowUpload(true)}>📄 Upload student list</button>
         <button className="btn" onClick={addStudent}>＋ Student</button>
-        <button className="btn primary" onClick={() => setShowAssign(true)}>
-          ＋ Assignment
-        </button>
         <button className="btn" onClick={exportCsv}>⬇ Export CSV</button>
       </div>
 
-      <div className="stats">
-        <div className="stat">
-          <div className="label">Students</div>
-          <div className="value">{cls.students.length}</div>
-        </div>
-        <div className="stat">
-          <div className="label">Assignments</div>
-          <div className="value">{cls.assignments.length}</div>
-        </div>
-        <div className="stat">
-          <div className="label">Class average</div>
-          <div className="value">
-            {classAvg === null ? "—" : `${classAvg.toFixed(1)}%`}
-          </div>
-        </div>
+      <div className="tabs">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            className={`tab${tab === t.key ? " active" : ""}`}
+            onClick={() => setTab(t.key)}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      <div className="gb-wrap">
-        <table className="gb">
-          <thead>
-            <tr>
-              <th className="name-col">Student</th>
-              {cls.assignments.map((a) => (
-                <th key={a.id}>
-                  <span className="assign-head">
-                    <span>{a.name}</span>
-                    <span className="pts">out of {a.points}</span>
-                    <button
-                      title="Delete assignment"
-                      onClick={() => removeAssignment(a)}
-                    >
-                      remove
-                    </button>
-                  </span>
-                </th>
-              ))}
-              <th className="avg">Average</th>
-              <th>Letter</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {cls.students.length === 0 && (
-              <tr>
-                <td className="name-col" colSpan={cls.assignments.length + 4}>
-                  No students yet — upload a student list or add one by hand.
-                </td>
-              </tr>
-            )}
-            {cls.students.map((st) => {
-              const avg = studentAverage(cls, st.id);
-              return (
-                <tr key={st.id}>
-                  <td className="name-col" title={st.sid ? `ID ${st.sid}` : ""}>
-                    {st.name}
-                    {st.grade ? (
-                      <span style={{ color: "var(--ink-soft)", fontWeight: 400 }}>
-                        {" "}
-                        · Gr {st.grade}
-                      </span>
-                    ) : null}
-                  </td>
-                  {cls.assignments.map((a) => (
-                    <td key={a.id} style={{ textAlign: "center" }}>
-                      <input
-                        className="score"
-                        inputMode="decimal"
-                        value={cls.scores?.[st.id]?.[a.id] ?? ""}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          if (v === "" || /^\d*\.?\d*$/.test(v))
-                            setScore(st.id, a.id, v);
-                        }}
-                        placeholder="–"
-                      />
-                    </td>
-                  ))}
-                  <td className="avg" style={{ textAlign: "center" }}>
-                    {avg === null ? "—" : `${avg.toFixed(1)}%`}
-                  </td>
-                  <td style={{ textAlign: "center" }}>
-                    {avg === null ? (
-                      "—"
-                    ) : (
-                      <span className={`grade-pill grade-${letterFor(avg).toLowerCase()}`}>
-                        {letterFor(avg)}
-                      </span>
-                    )}
-                  </td>
-                  <td>
-                    <button
-                      className="btn small danger"
-                      onClick={() => removeStudent(st)}
-                      title="Remove student"
-                    >
-                      ✕
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-          {cls.students.length > 0 && cls.assignments.length > 0 && (
-            <tfoot>
-              <tr>
-                <td className="name-col">Class average</td>
-                {cls.assignments.map((a) => {
-                  const avg = assignmentAverage(cls, a.id);
-                  return (
-                    <td key={a.id}>
-                      {avg === null ? "—" : `${avg.toFixed(1)}%`}
-                    </td>
-                  );
-                })}
-                <td>{classAvg === null ? "—" : `${classAvg.toFixed(1)}%`}</td>
-                <td colSpan={2} />
-              </tr>
-            </tfoot>
-          )}
-        </table>
-      </div>
-
-      {showAssign && (
-        <AssignmentModal
-          onClose={() => setShowAssign(false)}
-          onAdd={(name, points) => {
-            updateClass((c) => ({
-              ...c,
-              assignments: [
-                ...c.assignments,
-                {
-                  id: Math.random().toString(36).slice(2, 10),
-                  name,
-                  points,
-                },
-              ],
-            }));
-            setShowAssign(false);
-          }}
-        />
+      {cls.students.length === 0 ? (
+        <div className="card">No students yet — upload a student list or add one by hand.</div>
+      ) : tab === "gt" ? (
+        <GradeTracker cls={cls} results={results} setCell={setCell} removeStudent={removeStudent} />
+      ) : tab === "fj" ? (
+        <FinalJournals cls={cls} results={results} setCell={setCell} />
+      ) : (
+        <FinalCoop cls={cls} results={results} setCell={setCell} />
       )}
 
       {showUpload && (
-        <UploadModal
-          onClose={() => setShowUpload(false)}
-          onApply={(students, mode) => {
-            updateClass((c) => {
-              if (mode === "replace") {
-                return { ...c, students: sortRoster(students), scores: {} };
-              }
-              const existing = new Set(
-                c.students.map((s) => s.name.toLowerCase())
-              );
-              const added = students.filter(
-                (s) => !existing.has(s.name.toLowerCase())
-              );
-              return { ...c, students: sortRoster([...c.students, ...added]) };
-            });
-            setShowUpload(false);
-          }}
-        />
+        <UploadModal onClose={() => setShowUpload(false)} onApply={applyRoster} />
       )}
     </>
   );
 }
 
-function AssignmentModal({ onClose, onAdd }) {
-  const [name, setName] = useState("");
-  const [points, setPoints] = useState("100");
-  const valid = name.trim() && Number(points) > 0;
+// ---------- Shared cell inputs ----------
+
+function LevelInput({ cell, onChange }) {
+  const v = cell?.lv ?? "";
+  const bad = v !== "" && !isValidLevel(v);
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h2>New assignment</h2>
-        <div className="field">
-          <label>Name</label>
-          <input
-            type="text"
-            autoFocus
-            value={name}
-            placeholder="e.g. Unit 1 Test"
-            onChange={(e) => setName(e.target.value)}
-          />
-        </div>
-        <div className="field">
-          <label>Out of (total points)</label>
-          <input
-            type="number"
-            min="1"
-            value={points}
-            onChange={(e) => setPoints(e.target.value)}
-          />
-        </div>
-        <div className="modal-actions">
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button
-            className="btn primary"
-            disabled={!valid}
-            onClick={() => valid && onAdd(name.trim(), Number(points))}
-          >
-            Add assignment
-          </button>
-        </div>
-      </div>
+    <input
+      className={`entry${bad ? " bad" : ""}`}
+      value={v}
+      placeholder=""
+      title={bad ? "Not a valid level — use 4+, 4, 4-, 3+ … 1-, R, or 0-4" : ""}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
+}
+
+function PctInput({ cell, onChange }) {
+  return (
+    <input
+      className="entry"
+      value={cell?.pc ?? ""}
+      onChange={(e) => {
+        const v = e.target.value;
+        if (v === "" || /^\d*\.?\d*%?$/.test(v)) onChange(v);
+      }}
+    />
+  );
+}
+
+function AutoCell({ cell }) {
+  const v = cell?.lv ? levelToPct(cell.lv) : null;
+  return <span className="auto-val">{v === null ? "" : fmtPct(v, 1)}</span>;
+}
+
+// A merged (3-row) result cell showing % and level
+function ResultCell({ pct, rows = 3, cls = "" }) {
+  return (
+    <td rowSpan={rows} className={`result ${cls}`}>
+      {pct === null ? "—" : (
+        <>
+          <div className="result-pct">{fmtPct(pct)}</div>
+          <div className="result-lv">{pctToLevel(pct)}</div>
+        </>
+      )}
+    </td>
+  );
+}
+
+// ---------- Module 1: Grade Tracker ----------
+
+function GradeTracker({ cls, results, setCell, removeStudent }) {
+  const groups = GT_GROUPS;
+  const nCols = groups.reduce((a, g) => a + g.cols.length, 0);
+  return (
+    <div className="gb-wrap">
+      <table className="coop">
+        <thead>
+          <tr>
+            <th className="name-col" rowSpan={3}>Student</th>
+            <th className="rowtype-col" rowSpan={3}></th>
+            <th className="h-blue" colSpan={GT_PP_IDS.length}>PRE-PLACEMENT (65%)</th>
+            <th className="h-red" colSpan={8}>HOURS &amp; JOURNALS (30%)</th>
+            <th className="h-purple" colSpan={1}>LEARNING PLAN (5%)</th>
+            <th className="h-purple" colSpan={2} rowSpan={2}>Averages</th>
+            <th className="h-black" rowSpan={3}>Final Grade</th>
+            <th rowSpan={3} className="x-col"></th>
+          </tr>
+          <tr>
+            {groups.slice(0, 3).map((g) => (
+              <th key={g.key} className={`h-${g.theme}-lt`} colSpan={g.cols.length}>{g.label}</th>
+            ))}
+            <th className="h-red-lt" colSpan={8}>Level, hours or %</th>
+            <th className="h-purple-lt" colSpan={1}></th>
+          </tr>
+          <tr>
+            {groups.map((g) =>
+              g.cols.map((label, i) => (
+                <th key={`${g.key}.${i}`} className={`sub h-${g.theme}-lt`}>{label}</th>
+              ))
+            )}
+            <th className="sub h-purple-lt">Pre-Placement Avg</th>
+            <th className="sub h-purple-lt">H&amp;J Avg</th>
+          </tr>
+        </thead>
+        <tbody>
+          {cls.students.map((st, idx) => {
+            const r = results[st.id];
+            const band = idx % 2 === 1 ? " band" : "";
+            const colIds = groups.flatMap((g) => g.cols.map((_, i) => `gt.${g.key}.${i}`));
+            const cellFor = (id) => cls.cells?.[st.id]?.[id];
+            return (
+              <FragmentRows
+                key={st.id}
+                name={st.name}
+                band={band}
+                onRemove={() => removeStudent(st)}
+                rows={[
+                  {
+                    type: "lv",
+                    cells: colIds.map((id) => (
+                      <td key={id} className="c-lv">
+                        <LevelInput cell={cellFor(id)} onChange={(v) => setCell(st.id, id, "lv", v)} />
+                      </td>
+                    )),
+                    trailing: (
+                      <>
+                        <ResultCell pct={r.pp} cls="r-purple" />
+                        <ResultCell pct={r.hj} cls="r-purple" />
+                        <ResultCell pct={r.gtFinal} cls="r-black" />
+                      </>
+                    ),
+                  },
+                  {
+                    type: "auto",
+                    cells: colIds.map((id) => (
+                      <td key={id} className="c-auto"><AutoCell cell={cellFor(id)} /></td>
+                    )),
+                  },
+                  {
+                    type: "pc",
+                    cells: colIds.map((id) => (
+                      <td key={id} className="c-pc">
+                        <PctInput cell={cellFor(id)} onChange={(v) => setCell(st.id, id, "pc", v)} />
+                      </td>
+                    )),
+                  },
+                ]}
+              />
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
+
+// Renders one student's 2-3 rows with merged name + row-type labels
+function FragmentRows({ name, band, rows, trailing, onRemove }) {
+  const labels = { lv: "Level", auto: "% from level", pc: "% direct" };
+  return (
+    <>
+      {rows.map((row, i) => (
+        <tr key={row.type}>
+          {i === 0 && (
+            <td rowSpan={rows.length} className={`name-col${band}`}>{name}</td>
+          )}
+          <td className={`rowtype c-${row.type}`}>{labels[row.type]}</td>
+          {row.cells}
+          {i === 0 && row.trailing}
+          {i === 0 && onRemove && (
+            <td rowSpan={rows.length} className="x-col">
+              <button className="btn small danger" title="Remove student" onClick={onRemove}>✕</button>
+            </td>
+          )}
+        </tr>
+      ))}
+    </>
+  );
+}
+
+// ---------- Module 2: Final Journals ----------
+
+function FinalJournals({ cls, results, setCell }) {
+  return (
+    <div className="gb-wrap">
+      <table className="coop">
+        <thead>
+          <tr>
+            <th className="name-col" rowSpan={2}>Student</th>
+            <th className="rowtype-col" rowSpan={2}></th>
+            <th className="h-blue" colSpan={FJ_WEEKS.length}>FINAL JOURNALS — WEEKS 7–15</th>
+            <th className="h-purple" rowSpan={2}>Average Level</th>
+            <th className="h-purple" rowSpan={2}>Average %</th>
+          </tr>
+          <tr>
+            {FJ_WEEKS.map((w) => (
+              <th key={w} className="sub h-blue-lt">Week {w}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {cls.students.map((st, idx) => {
+            const r = results[st.id];
+            const band = idx % 2 === 1 ? " band" : "";
+            const cellFor = (w) => cls.cells?.[st.id]?.[`fj.${w}`];
+            return (
+              <FragmentRows
+                key={st.id}
+                name={st.name}
+                band={band}
+                rows={[
+                  {
+                    type: "lv",
+                    cells: FJ_WEEKS.map((w) => (
+                      <td key={w} className="c-lv">
+                        <LevelInput
+                          cell={cellFor(w)}
+                          onChange={(v) => setCell(st.id, `fj.${w}`, "lv", v)}
+                        />
+                      </td>
+                    )),
+                    trailing: (
+                      <>
+                        <td rowSpan={2} className="result r-purple">
+                          <div className="result-lv big">{r.fjAvg === null ? "—" : r.fjLevel}</div>
+                        </td>
+                        <ResultCell pct={r.fjAvg} rows={2} cls="r-purple" />
+                      </>
+                    ),
+                  },
+                  {
+                    type: "auto",
+                    cells: FJ_WEEKS.map((w) => (
+                      <td key={w} className="c-auto"><AutoCell cell={cellFor(w)} /></td>
+                    )),
+                  },
+                ]}
+              />
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ---------- Module 3: Final Co-op Marking Sheet ----------
+
+function FinalCoop({ cls, results, setCell }) {
+  return (
+    <div className="gb-wrap">
+      <table className="coop">
+        <thead>
+          <tr>
+            <th className="name-col" rowSpan={2}>Student</th>
+            <th className="rowtype-col" rowSpan={2}></th>
+            {FC_COLS.map((c) => (
+              <th key={c.id} className={c.auto ? "h-grey" : "h-blue"}>
+                {c.label}
+                {c.auto ? <span className="auto-tag">auto</span> : null}
+              </th>
+            ))}
+            <th className="h-black" rowSpan={2}>Final Level</th>
+            <th className="h-black" rowSpan={2}>Final %</th>
+          </tr>
+          <tr>
+            {FC_COLS.map((c) => (
+              <th key={c.id} className={`sub ${c.auto ? "h-grey" : "h-blue-lt"}`}>
+                {Math.round(c.weight * 100)}%
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {cls.students.map((st, idx) => {
+            const r = results[st.id];
+            const band = idx % 2 === 1 ? " band" : "";
+            const cellFor = (id) => cls.cells?.[st.id]?.[id];
+            return (
+              <FragmentRows
+                key={st.id}
+                name={st.name}
+                band={band}
+                rows={[
+                  {
+                    type: "lv",
+                    cells: FC_COLS.map((c) =>
+                      c.auto ? (
+                        <td key={c.id} rowSpan={3} className="c-grey">
+                          {r.fcParts[c.id] === null ? "—" : fmtPct(r.fcParts[c.id])}
+                        </td>
+                      ) : (
+                        <td key={c.id} className="c-lv">
+                          <LevelInput cell={cellFor(c.id)} onChange={(v) => setCell(st.id, c.id, "lv", v)} />
+                        </td>
+                      )
+                    ),
+                    trailing: (
+                      <>
+                        <td rowSpan={3} className="result r-black">
+                          <div className="result-lv big">{r.fcFinal === null ? "—" : r.fcLevel}</div>
+                        </td>
+                        <ResultCell pct={r.fcFinal} cls="r-black" />
+                      </>
+                    ),
+                  },
+                  {
+                    type: "auto",
+                    cells: FC_COLS.filter((c) => !c.auto).map((c) => (
+                      <td key={c.id} className="c-auto"><AutoCell cell={cellFor(c.id)} /></td>
+                    )),
+                  },
+                  {
+                    type: "pc",
+                    cells: FC_COLS.filter((c) => !c.auto).map((c) => (
+                      <td key={c.id} className="c-pc">
+                        <PctInput cell={cellFor(c.id)} onChange={(v) => setCell(st.id, c.id, "pc", v)} />
+                      </td>
+                    )),
+                  },
+                ]}
+              />
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ---------- CSV export ----------
+
+function buildCsv(cls, tab) {
+  const rows = [];
+  if (tab === "gt") {
+    const colIds = GT_GROUPS.flatMap((g) => g.cols.map((_, i) => `gt.${g.key}.${i}`));
+    const labels = GT_GROUPS.flatMap((g) => g.cols);
+    rows.push(["Student", ...labels, "Pre-Placement Avg", "H&J Avg", "Final Grade %", "Final Level"]);
+    for (const st of cls.students) {
+      const r = calcStudent(cls.cells?.[st.id]);
+      rows.push([
+        st.name,
+        ...colIds.map((id) => {
+          const v = effPct(cls.cells?.[st.id]?.[id]);
+          return v === null ? "" : v.toFixed(1);
+        }),
+        r.pp === null ? "" : r.pp.toFixed(1),
+        r.hj === null ? "" : r.hj.toFixed(1),
+        r.gtFinal === null ? "" : r.gtFinal.toFixed(1),
+        r.gtFinal === null ? "" : pctToLevel(r.gtFinal),
+      ]);
+    }
+  } else if (tab === "fj") {
+    rows.push(["Student", ...FJ_WEEKS.map((w) => `Week ${w}`), "Average Level", "Average %"]);
+    for (const st of cls.students) {
+      const r = calcStudent(cls.cells?.[st.id]);
+      rows.push([
+        st.name,
+        ...FJ_WEEKS.map((w) => cls.cells?.[st.id]?.[`fj.${w}`]?.lv ?? ""),
+        r.fjAvg === null ? "" : r.fjLevel,
+        r.fjAvg === null ? "" : r.fjAvg.toFixed(1),
+      ]);
+    }
+  } else {
+    rows.push(["Student", ...FC_COLS.map((c) => `${c.label} (${Math.round(c.weight * 100)}%)`), "Final Level", "Final %"]);
+    for (const st of cls.students) {
+      const r = calcStudent(cls.cells?.[st.id]);
+      rows.push([
+        st.name,
+        ...FC_COLS.map((c) => (r.fcParts[c.id] === null ? "" : r.fcParts[c.id].toFixed(1))),
+        r.fcFinal === null ? "" : r.fcLevel,
+        r.fcFinal === null ? "" : r.fcFinal.toFixed(1),
+      ]);
+    }
+  }
+  return rows;
+}
+
+// ---------- Roster upload (unchanged behaviour) ----------
 
 function UploadModal({ onClose, onApply }) {
   const [students, setStudents] = useState([]);
@@ -423,18 +555,14 @@ function UploadModal({ onClose, onApply }) {
         const buf = await file.arrayBuffer();
         const wb = XLSX.read(buf);
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false });
-        parsed = parseRosterRows(rows);
+        parsed = parseRosterRows(XLSX.utils.sheet_to_json(ws, { header: 1, raw: false }));
       } else {
-        // .txt or anything else — treat as pasted text
         parsed = parseRosterText(await file.text());
       }
       if (!parsed.length) {
-        setError(
-          "Couldn't find any student names in that file. Try a CSV/Excel file with a Name column, or paste the names below."
-        );
+        setError("Couldn't find any student names in that file. Try a CSV/Excel file with a Name column, or paste the names below.");
       }
-      setStudents(parsed);
+      setStudents(parsed.slice(0, MAX_STUDENTS));
     } catch (e) {
       setError(`Sorry, that file couldn't be read (${e.message}).`);
     }
@@ -447,10 +575,7 @@ function UploadModal({ onClose, onApply }) {
         <div
           className={`drop${over ? " over" : ""}`}
           onClick={() => fileRef.current?.click()}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setOver(true);
-          }}
+          onDragOver={(e) => { e.preventDefault(); setOver(true); }}
           onDragLeave={() => setOver(false)}
           onDrop={(e) => {
             e.preventDefault();
@@ -461,8 +586,7 @@ function UploadModal({ onClose, onApply }) {
         >
           <strong>Drop a file here or click to choose</strong>
           <div className="hint">
-            Excel (.xlsx), CSV, or text — like the &quot;Student List&quot;
-            export from the school system
+            Excel (.xlsx), CSV, or text — like the &quot;Student List&quot; export from the school system
           </div>
           <input
             ref={fileRef}
@@ -481,17 +605,11 @@ function UploadModal({ onClose, onApply }) {
           <label>…or paste names (one per line)</label>
           <textarea
             rows={4}
-            style={{
-              border: "1px solid var(--pink-300)",
-              borderRadius: 8,
-              padding: 8,
-              fontSize: 13,
-              fontFamily: "inherit",
-            }}
+            style={{ border: "1px solid var(--pink-300)", borderRadius: 8, padding: 8, fontSize: 13, fontFamily: "inherit" }}
             placeholder={"Smith, Jordan\nLee, Casey"}
             onChange={(e) => {
               setError("");
-              setStudents(parseRosterText(e.target.value));
+              setStudents(parseRosterText(e.target.value).slice(0, MAX_STUDENTS));
             }}
           />
         </div>
@@ -501,8 +619,7 @@ function UploadModal({ onClose, onApply }) {
         {students.length > 0 && (
           <>
             <p className="hint">
-              Found <strong>{students.length}</strong> student
-              {students.length === 1 ? "" : "s"}:
+              Found <strong>{students.length}</strong> student{students.length === 1 ? "" : "s"}:
             </p>
             <div className="preview-list">
               {students.map((s) => (
@@ -516,9 +633,7 @@ function UploadModal({ onClose, onApply }) {
             <div className="field">
               <label>How should this update the class?</label>
               <select value={mode} onChange={(e) => setMode(e.target.value)}>
-                <option value="replace">
-                  Replace the roster (clears existing grades)
-                </option>
+                <option value="replace">Replace the roster (clears existing grades)</option>
                 <option value="add">Add new students, keep everything else</option>
               </select>
             </div>
@@ -527,11 +642,7 @@ function UploadModal({ onClose, onApply }) {
 
         <div className="modal-actions">
           <button className="btn" onClick={onClose}>Cancel</button>
-          <button
-            className="btn primary"
-            disabled={!students.length}
-            onClick={() => onApply(students, mode)}
-          >
+          <button className="btn primary" disabled={!students.length} onClick={() => onApply(students, mode)}>
             Apply to class
           </button>
         </div>

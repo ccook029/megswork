@@ -5,11 +5,20 @@ A pale-pink teaching dashboard built with Next.js, ready to deploy on Vercel.
 ## What's here
 
 - **Home** — landing page with a card for each tool (more tools coming).
-- **Gradebook** — per-class rosters, assignments, mark entry, automatic
-  averages and letter grades (Ontario scale: A ≥ 80, B ≥ 70, C ≥ 60, D ≥ 50),
-  CSV export, and a **student list upload** that reads Excel/CSV/text files —
-  including the school system's "Student List" export format
-  (`ID | Name | Grade | Gender | Birth Date`).
+- **Gradebook** — a full Ontario co-op gradebook with three linked modules,
+  replicating the Excel workbook:
+  - **Grade Tracker** — Pre-Placement (65%): Unit 1, Unit 2 and Quizzes;
+    Hours & Journals (30%); Learning Plan (5%). Each assignment takes an
+    achievement level (4+ … R, converted via the Ontario midpoint table)
+    or a direct percent, never both.
+  - **Final Journals** — weeks 7-15 with average % and average level.
+  - **Final Co-op Marking Sheet** — weighted summary; Midterm (10%) pulls
+    automatically from the Grade Tracker final grade and Journals (15%)
+    from the Final Journals average.
+  Plus per-module CSV export and a **student list upload** that reads
+  Excel/CSV/text files — including the school system's "Student List"
+  export format (`ID | Name | Grade | Gender | Birth Date`). Rosters cap
+  at 30 students and names flow to all three modules automatically.
 
 All gradebook data is stored in the browser's localStorage on the device
 where it's entered — nothing is sent to a server. Use **Export CSV**

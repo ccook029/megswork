@@ -534,3 +534,175 @@ tfoot td.name-col {
   gap: 10px;
   margin-top: 16px;
 }
+
+/* ---------- Co-op gradebook (Excel-style modules) ---------- */
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.tab {
+  border: 1px solid var(--pink-300);
+  border-bottom: none;
+  background: var(--pink-100);
+  color: var(--ink-soft);
+  font-weight: 600;
+  font-size: 13.5px;
+  padding: 8px 16px;
+  border-radius: 10px 10px 0 0;
+  cursor: pointer;
+}
+
+.tab.active {
+  background: var(--white);
+  color: var(--rose-900);
+  box-shadow: 0 -2px 6px rgba(163, 77, 111, 0.12);
+}
+
+table.coop {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12.5px;
+  width: max-content;
+}
+
+table.coop th,
+table.coop td {
+  border-bottom: 1px solid #e3e3e3;
+  border-right: 1px solid #e3e3e3;
+  padding: 3px 6px;
+  white-space: nowrap;
+}
+
+table.coop thead th {
+  text-align: center;
+  font-weight: 700;
+  padding: 6px 8px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+table.coop thead th.sub {
+  font-weight: 600;
+  font-size: 11.5px;
+  white-space: normal;
+  min-width: 74px;
+  max-width: 110px;
+  vertical-align: bottom;
+}
+
+/* Header themes (match the Excel workbook) */
+.h-blue   { background: #4472c4; color: #fff; }
+.h-green  { background: #548235; color: #fff; }
+.h-gold   { background: #bf8f00; color: #fff; }
+.h-red    { background: #c00000; color: #fff; }
+.h-purple { background: #7030a0; color: #fff; }
+.h-black  { background: #3a3a3a; color: #fff; }
+.h-grey   { background: #d9d9d9; color: #555; }
+.h-blue-lt   { background: #d9e2f3; color: #2b4a86; }
+.h-green-lt  { background: #e2efda; color: #375623; }
+.h-gold-lt   { background: #fff2cc; color: #7f6000; }
+.h-red-lt    { background: #fce4d6; color: #843c0c; }
+.h-purple-lt { background: #d9d2e9; color: #4b2273; }
+
+.auto-tag {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+/* Sticky student name column */
+table.coop .name-col {
+  position: sticky;
+  left: 0;
+  background: #fff;
+  z-index: 1;
+  text-align: left;
+  font-weight: 600;
+  color: #2f2f2f;
+  width: 190px;
+  min-width: 190px;
+  max-width: 190px;
+  white-space: normal;
+  vertical-align: middle;
+}
+
+table.coop thead th.name-col {
+  background: var(--pink-100);
+  color: var(--rose-800);
+  z-index: 3;
+}
+
+table.coop .name-col.band { background: #ddebf7; }
+
+table.coop .rowtype-col,
+td.rowtype {
+  position: sticky;
+  left: 190px;
+  z-index: 1;
+  min-width: 84px;
+  border-right: 2px solid #c9c9c9;
+}
+
+table.coop thead th.rowtype-col {
+  background: var(--pink-100);
+  z-index: 3;
+}
+
+td.rowtype {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #666;
+}
+
+/* The 3-row entry system */
+td.c-lv,  .rowtype.c-lv   { background: #e2efda; }
+td.c-auto, .rowtype.c-auto { background: #fff2cc; }
+td.c-pc,  .rowtype.c-pc   { background: #fce4d6; }
+td.c-grey { background: #ececec; color: #555; text-align: center; font-weight: 600; vertical-align: middle; }
+
+table.coop input.entry {
+  width: 58px;
+  border: 1px solid transparent;
+  background: transparent;
+  text-align: center;
+  font-size: 12.5px;
+  border-radius: 4px;
+  padding: 2px 3px;
+}
+
+table.coop input.entry:hover { border-color: #bbb; }
+table.coop input.entry:focus { border-color: #4472c4; background: #fff; outline: none; }
+table.coop input.entry.bad { color: #c00000; font-weight: 700; }
+
+.auto-val {
+  display: block;
+  text-align: center;
+  color: #7f6000;
+  font-size: 12px;
+}
+
+/* Merged result cells */
+td.result {
+  text-align: center;
+  vertical-align: middle;
+  min-width: 84px;
+  font-weight: 700;
+}
+
+td.result.r-purple { background: #d9d2e9; color: #4b2273; }
+td.result.r-black  { background: #d9d9d9; color: #222; }
+
+.result-pct { font-size: 14px; }
+.result-lv  { font-size: 11px; opacity: 0.8; }
+.result-lv.big { font-size: 16px; }
+
+td.x-col { background: #fff; border-left: 1px solid #e3e3e3; vertical-align: middle; }
