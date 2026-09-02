@@ -7,6 +7,25 @@ import { DOC_LIST } from "../../lib/trackingSpecs";
 import { generateTrackingDocx } from "../../lib/trackingDocs";
 import { generateTrackingPdf } from "../../lib/trackingPdf";
 
+// Ready-made board documents served from /public/documents — these are fixed
+// files (not generated from the roster), on the school board letterhead.
+const EMPLOYER_FILES = [
+  {
+    name: "Employer Forms Package",
+    icon: "📋",
+    desc:
+      "All five board forms in one printable document: Interview Feedback, Post-Interview Contact Information, Initial Responsibilities, Employer Feedback, and Post-Placement Feedback — with blank backsides for double-sided printing",
+    base: "/documents/Employer Forms Package",
+  },
+  {
+    name: "Important Employer Dates",
+    icon: "🗓️",
+    desc:
+      "One-page fill-in sheet for placement start/end, Integration Days 1–4, and all six employer form deadlines",
+    base: "/documents/Important Employer Dates",
+  },
+];
+
 export default function Documents() {
   const [state, setState] = useState(null);
   const [classId, setClassId] = useState(null);
@@ -95,6 +114,27 @@ export default function Documents() {
           </div>
         </div>
       </section>
+
+      <h2 className="doc-group">Employer forms</h2>
+      <div className="doc-list" style={{ marginTop: 10, marginBottom: 28 }}>
+        {EMPLOYER_FILES.map((d) => (
+          <div key={d.name} className="doc-row">
+            <span className="doc-icon">{d.icon}</span>
+            <span className="doc-meta">
+              <span className="doc-name">{d.name}</span>
+              <span className="doc-desc">{d.desc}</span>
+            </span>
+            <span className="doc-buttons">
+              <a className="btn small" href={d.base + ".docx"} download>
+                ⬇ Word
+              </a>
+              <a className="btn small" href={d.base + ".pdf"} download>
+                ⬇ PDF
+              </a>
+            </span>
+          </div>
+        ))}
+      </div>
 
       <h2 className="doc-group">Individual documents</h2>
       <div className="doc-list" style={{ marginTop: 10 }}>
