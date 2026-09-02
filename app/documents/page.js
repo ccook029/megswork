@@ -26,6 +26,16 @@ const EMPLOYER_FILES = [
   },
 ];
 
+const SCHEDULE_FILES = [
+  {
+    name: "Co-op Schedule and Announcements",
+    icon: "🗒️",
+    desc:
+      "Pre-placement schedule day by day — announcement, tasks and due dates for every class day plus all integration days",
+    base: "/documents/Co-op Schedule and Announcements",
+  },
+];
+
 export default function Documents() {
   const [state, setState] = useState(null);
   const [classId, setClassId] = useState(null);
@@ -114,6 +124,27 @@ export default function Documents() {
           </div>
         </div>
       </section>
+
+      <h2 className="doc-group">Schedule</h2>
+      <div className="doc-list" style={{ marginTop: 10, marginBottom: 28 }}>
+        {SCHEDULE_FILES.map((d) => (
+          <div key={d.name} className="doc-row">
+            <span className="doc-icon">{d.icon}</span>
+            <span className="doc-meta">
+              <span className="doc-name">{d.name}</span>
+              <span className="doc-desc">{d.desc}</span>
+            </span>
+            <span className="doc-buttons">
+              <a className="btn small" href={d.base + ".docx"} download>
+                ⬇ Word
+              </a>
+              <a className="btn small" href={d.base + ".pdf"} download>
+                ⬇ PDF
+              </a>
+            </span>
+          </div>
+        ))}
+      </div>
 
       <h2 className="doc-group">Employer forms</h2>
       <div className="doc-list" style={{ marginTop: 10, marginBottom: 28 }}>
