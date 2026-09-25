@@ -36,6 +36,16 @@ const SCHEDULE_FILES = [
   },
 ];
 
+const BOARD_TEMPLATES = [
+  {
+    name: "Co-op Placement Template (Ledger)",
+    icon: "🗂️",
+    desc:
+      "Blank Cooperative Education Placement List on 11×17 ledger paper — 32 rows for student, placement, supervisor, OYAP/SHSM and IEP",
+    base: "/documents/Co-op Placement Template - Ledger",
+  },
+];
+
 export default function Documents() {
   const [state, setState] = useState(null);
   const [classId, setClassId] = useState(null);
@@ -177,6 +187,27 @@ export default function Documents() {
               <span className="doc-desc">{d.desc}</span>
             </span>
             <Buttons kind={d.key} />
+          </div>
+        ))}
+      </div>
+
+      <h2 className="doc-group" style={{ marginTop: 28 }}>Board templates</h2>
+      <div className="doc-list" style={{ marginTop: 10 }}>
+        {BOARD_TEMPLATES.map((d) => (
+          <div key={d.name} className="doc-row">
+            <span className="doc-icon">{d.icon}</span>
+            <span className="doc-meta">
+              <span className="doc-name">{d.name}</span>
+              <span className="doc-desc">{d.desc}</span>
+            </span>
+            <span className="doc-buttons">
+              <a className="btn small" href={d.base + ".docx"} download>
+                ⬇ Word
+              </a>
+              <a className="btn small" href={d.base + ".pdf"} download>
+                ⬇ PDF
+              </a>
+            </span>
           </div>
         ))}
       </div>
