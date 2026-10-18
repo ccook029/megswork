@@ -11,12 +11,14 @@ import {
   GT_GROUPS, GT_PP_IDS, FJ_WEEKS, FC_COLS,
   isValidLevel, levelToPct, effPct, parsePct, calcStudent, fmtPct, pctToLevel,
 } from "../../lib/coop";
+import { DANCE_GROUPS, DANCE_SECTIONS, danceId, calcDance } from "../../lib/dance";
 
 const TABS = [
   { key: "gt", label: "Mid Term Marking Sheet" },
   { key: "fj", label: "Final Journals" },
   { key: "fc", label: "Final Marking Sheet" },
 ];
+const DANCE_TABS = [{ key: "dn", label: "Dance Marking Sheet" }];
 
 export default function Gradebook() {
   const [state, setState] = useState(null);
@@ -80,6 +82,9 @@ export default function Gradebook() {
   if (!state) return <p className="page-sub">Loading your gradebook…</p>;
 
   const cls = state.classes.find((c) => c.id === state.activeClassId) || state.classes[0];
+  const isDance = cls.type === "dance";
+  const tabs = isDance ? DANCE_TABS : TABS;
+  const activeTab = tabs.some((t) => t.key === tab) ? tab : tabs[0].key;
 
   const updateClass = (updater) =>
     setState((s) => ({
@@ -103,10 +108,13 @@ export default function Gradebook() {
   const addClass = () => {
     const name = prompt("Name for the new class (e.g. Coop AM 2026-27):");
     if (!name) return;
+    const type = confirm(
+      "Which gradebook should this class use?\n\nOK = Co-op (Mid Term / Journals / Final)\nCancel = Dance (ATC20 marks breakdown)"
+    ) ? "coop" : "dance";
     const id = Math.random().toString(36).slice(2, 10);
     setState((s) => ({
       ...s,
-      classes: [...s.classes, { id, name, students: [], cells: {} }],
+      classes: [...s.classes, { id, name, type, students: [], cells: {} }],
       activeClassId: id,
     }));
   };
@@ -158,7 +166,7 @@ export default function Gradebook() {
   };
 
   const exportCsv = () => {
-    const rows = buildCsv(cls, tab);
+    const rows = isDance ? buildDanceCsv(cls) : buildCsv(cls, activeTab);
     const csv = rows
       .map((r) => r.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))
       .join("\n");
@@ -166,13 +174,16 @@ export default function Gradebook() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${cls.name} - ${TABS.find((t) => t.key === tab).label}.csv`;
+    a.download = `${cls.name} - ${tabs.find((t) => t.key === activeTab).label}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   const results = Object.fromEntries(
-    cls.students.map((st) => [st.id, calcStudent(cls.cells?.[st.id])])
+    cls.students.map((st) => [
+      st.id,
+      isDance ? calcDance(cls.cells?.[st.id]) : calcStudent(cls.cells?.[st.id]),
+    ])
   );
 
   return (
@@ -213,10 +224,10 @@ export default function Gradebook() {
       </div>
 
       <div className="tabs">
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <button
             key={t.key}
-            className={`tab${tab === t.key ? " active" : ""}`}
+            className={`tab${activeTab === t.key ? " active" : ""}`}
             onClick={() => setTab(t.key)}
           >
             {t.label}
@@ -231,16 +242,28 @@ export default function Gradebook() {
       {cls.students.length === 0 ? (
         <div className="card">No students yet — upload a student list or add one by hand.</div>
       ) : view === "student" ? (
-        <StudentView
-          cls={cls}
-          results={results}
-          setCell={setCell}
-          idx={Math.min(studentIdx, cls.students.length - 1)}
-          setIdx={setStudentIdx}
-        />
-      ) : tab === "gt" ? (
+        isDance ? (
+          <DanceStudentView
+            cls={cls}
+            results={results}
+            setCell={setCell}
+            idx={Math.min(studentIdx, cls.students.length - 1)}
+            setIdx={setStudentIdx}
+          />
+        ) : (
+          <StudentView
+            cls={cls}
+            results={results}
+            setCell={setCell}
+            idx={Math.min(studentIdx, cls.students.length - 1)}
+            setIdx={setStudentIdx}
+          />
+        )
+      ) : isDance ? (
+        <DanceTracker cls={cls} results={results} setCell={setCell} removeStudent={removeStudent} />
+      ) : activeTab === "gt" ? (
         <GradeTracker cls={cls} results={results} setCell={setCell} removeStudent={removeStudent} />
-      ) : tab === "fj" ? (
+      ) : activeTab === "fj" ? (
         <FinalJournals cls={cls} results={results} setCell={setCell} />
       ) : (
         <FinalCoop cls={cls} results={results} setCell={setCell} />
@@ -940,4 +963,232 @@ function UploadModal({ onClose, onApply }) {
       </div>
     </div>
   );
+}
+
+// ---------- Dance (ATC20) marking sheet ----------
+
+function DanceTracker({ cls, results, setCell, removeStudent }) {
+  const groups = DANCE_GROUPS;
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      return JSON.parse(localStorage.getItem("megs-dn-collapsed")) || {};
+    } catch {
+      return {};
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("megs-dn-collapsed", JSON.stringify(collapsed));
+    } catch {}
+  }, [collapsed]);
+
+  const isC = (k) => !!collapsed[k];
+  const toggle = (k) => setCollapsed((c) => ({ ...c, [k]: !c[k] }));
+  const span = (g) => (isC(g.key) ? 1 : g.cols.length);
+  const byKey = Object.fromEntries(groups.map((g) => [g.key, g]));
+  const sectionSpan = (sec) => sec.keys.reduce((a, k) => a + span(byKey[k]), 0);
+  const arrow = (k) => (isC(k) ? "▸" : "▾");
+  const pctLabel = (g) => `${Math.round(g.weight * 100)}%`;
+
+  return (
+    <>
+      <p className="hint" style={{ margin: "0 0 8px" }}>
+        Tip: click a section header (▾ Comprehension, Skills …) to collapse it to
+        its average. Click a student&apos;s name for their printable grade report.
+      </p>
+      <div className="gb-wrap">
+        <table className="coop">
+          <thead>
+            <tr className="hr1">
+              <th className="name-col" rowSpan={3}>Student</th>
+              <th className="rowtype-col" rowSpan={3}></th>
+              {DANCE_SECTIONS.map((sec) => (
+                <th key={sec.label} className={sec.h} colSpan={sectionSpan(sec)}>{sec.label}</th>
+              ))}
+              <th className="h-purple" colSpan={2} rowSpan={2}>Averages</th>
+              <th className="h-black" rowSpan={3}>Current Mark</th>
+              <th rowSpan={3} className="x-col"></th>
+            </tr>
+            <tr className="hr2">
+              {groups.map((g) => (
+                <th
+                  key={g.key}
+                  className={`h-${g.theme === "black" ? "purple" : g.theme}-lt toggle`}
+                  colSpan={span(g)}
+                  onClick={() => toggle(g.key)}
+                  title="Click to expand / collapse this section"
+                >
+                  {arrow(g.key)} {g.label} ({pctLabel(g)}){isC(g.key) ? ` · ${g.cols.length}` : ""}
+                </th>
+              ))}
+            </tr>
+            <tr className="hr3">
+              {groups.map((g) =>
+                isC(g.key) ? (
+                  <th key={g.key} className={`sub h-${g.theme === "black" ? "purple" : g.theme}-lt`}>Avg</th>
+                ) : (
+                  g.cols.map((label, i) => (
+                    <th key={`${g.key}.${i}`} className={`sub h-${g.theme === "black" ? "purple" : g.theme}-lt`}>
+                      {label}
+                      {g.colWeights ? ` (${g.colWeights[i]}%)` : ""}
+                    </th>
+                  ))
+                )
+              )}
+              <th className="sub h-purple-lt">Term Work (65%)</th>
+              <th className="sub h-purple-lt">Final (20%)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cls.students.map((st, idx) => {
+              const r = results[st.id];
+              const band = idx % 2 === 1 ? " band" : "";
+              const cellFor = (id) => cls.cells?.[st.id]?.[id];
+              const groupCells = (g, rowType) => {
+                const ids = g.cols.map((_, i) => danceId(g.key, i));
+                if (isC(g.key)) {
+                  if (rowType !== "lv") return [];
+                  const gAvg = r.groupAvg[g.key];
+                  return [
+                    <td key={g.key} rowSpan={3} className={`c-collapsed t-${g.theme === "black" ? "purple" : g.theme}`}>
+                      {gAvg === null ? "—" : fmtPct(gAvg)}
+                    </td>,
+                  ];
+                }
+                return ids.map((id) =>
+                  rowType === "lv" ? (
+                    <td key={id} className="c-lv">
+                      <LevelInput cell={cellFor(id)} onChange={(v) => setCell(st.id, id, "lv", v)} />
+                    </td>
+                  ) : rowType === "auto" ? (
+                    <td key={id} className="c-auto"><AutoCell cell={cellFor(id)} /></td>
+                  ) : (
+                    <td key={id} className="c-pc">
+                      <PctInput cell={cellFor(id)} onChange={(v) => setCell(st.id, id, "pc", v)} />
+                    </td>
+                  )
+                );
+              };
+              return (
+                <FragmentRows
+                  key={st.id}
+                  name={st.name}
+                  band={band}
+                  href={`/gradebook/student?id=${st.id}`}
+                  onRemove={() => removeStudent(st)}
+                  rows={[
+                    {
+                      type: "lv",
+                      cells: groups.flatMap((g) => groupCells(g, "lv")),
+                      trailing: (
+                        <>
+                          <ResultCell pct={r.term} cls="r-purple" />
+                          <ResultCell pct={r.fin} cls="r-purple" />
+                          <ResultCell pct={r.current} cls="r-black" />
+                        </>
+                      ),
+                    },
+                    { type: "auto", cells: groups.flatMap((g) => groupCells(g, "auto")) },
+                    { type: "pc", cells: groups.flatMap((g) => groupCells(g, "pc")) },
+                  ]}
+                />
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+function DanceStudentView({ cls, results, setCell, idx, setIdx }) {
+  const st = cls.students[idx];
+  if (!st) return null;
+  const r = results[st.id];
+  const cellFor = (id) => cls.cells?.[st.id]?.[id];
+
+  const EntryRow = ({ id, label }) => {
+    const e = effPct(cellFor(id));
+    return (
+      <div className="sv-row">
+        <span className="sv-label">{label}</span>
+        <span className="sv-inputs">
+          <LevelInput cell={cellFor(id)} onChange={(v) => setCell(st.id, id, "lv", v)} />
+          <PctInput cell={cellFor(id)} onChange={(v) => setCell(st.id, id, "pc", v)} />
+          <span className="sv-eff">{e === null ? "—" : fmtPct(e)}</span>
+        </span>
+      </div>
+    );
+  };
+
+  const stat = (label, v) => (
+    <div className="stat">
+      <div className="label">{label}</div>
+      <div className="value">{v === null ? "—" : `${fmtPct(v)} · ${pctToLevel(v)}`}</div>
+    </div>
+  );
+
+  return (
+    <div className="sv">
+      <div className="sv-nav">
+        <button className="btn" onClick={() => setIdx(Math.max(0, idx - 1))} disabled={idx === 0}>◀</button>
+        <select value={st.id} onChange={(e) => setIdx(cls.students.findIndex((x) => x.id === e.target.value))}>
+          {cls.students.map((x) => (
+            <option key={x.id} value={x.id}>{x.name}</option>
+          ))}
+        </select>
+        <button className="btn" onClick={() => setIdx(Math.min(cls.students.length - 1, idx + 1))} disabled={idx === cls.students.length - 1}>▶</button>
+        <Link className="btn" href={`/gradebook/student?id=${st.id}`}>Report</Link>
+      </div>
+
+      <div className="stats sv-stats">
+        {stat("Term Work (65%)", r.term)}
+        {stat("Att. & Part. (15%)", r.ap)}
+        {stat("Final (20%)", r.fin)}
+        {stat("Current Mark", r.current)}
+      </div>
+
+      <p className="hint sv-hint">Type a <strong>level</strong> (4+, 3, R …) in the first box <em>or</em> a <strong>percent</strong> in the second — the value on the right is what counts.</p>
+
+      {DANCE_GROUPS.map((g) => (
+        <section key={g.key} className={`sv-section t-${g.theme}`}>
+          <h3>{g.label} ({Math.round(g.weight * 100)}%)</h3>
+          {g.cols.map((label, i) => (
+            <EntryRow
+              key={i}
+              id={danceId(g.key, i)}
+              label={g.colWeights ? `${label} (${g.colWeights[i]}%)` : label}
+            />
+          ))}
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function buildDanceCsv(cls) {
+  const rows = [];
+  const colIds = DANCE_GROUPS.flatMap((g) => g.cols.map((_, i) => danceId(g.key, i)));
+  const labels = DANCE_GROUPS.flatMap((g) => g.cols.map((c) => `${g.label}: ${c}`));
+  rows.push([
+    "Student", ...labels,
+    ...DANCE_GROUPS.map((g) => `${g.label} Avg (${Math.round(g.weight * 100)}%)`),
+    "Term Work (65%)", "Current Mark %", "Current Level",
+  ]);
+  for (const st of cls.students) {
+    const r = calcDance(cls.cells?.[st.id]);
+    rows.push([
+      st.name,
+      ...colIds.map((id) => {
+        const v = effPct(cls.cells?.[st.id]?.[id]);
+        return v === null ? "" : v.toFixed(1);
+      }),
+      ...DANCE_GROUPS.map((g) => (r.groupAvg[g.key] === null ? "" : r.groupAvg[g.key].toFixed(1))),
+      r.term === null ? "" : r.term.toFixed(1),
+      r.current === null ? "" : r.current.toFixed(1),
+      r.current === null ? "" : pctToLevel(r.current),
+    ]);
+  }
+  return rows;
 }

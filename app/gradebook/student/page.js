@@ -7,7 +7,8 @@ import { syncLoad } from "../../../lib/sync";
 import {
   GT_GROUPS, FJ_WEEKS, FC_COLS, effPct, calcStudent, fmtPct, pctToLevel,
 } from "../../../lib/coop";
-import { generateStudentReportPdf } from "../../../lib/studentReportPdf";
+import { DANCE_GROUPS, danceId, calcDance } from "../../../lib/dance";
+import { generateStudentReportPdf, generateDanceReportPdf } from "../../../lib/studentReportPdf";
 
 export default function StudentReport() {
   const [data, setData] = useState(null);
@@ -37,12 +38,14 @@ export default function StudentReport() {
     );
 
   const { cls, st, cells } = data;
+  const isDance = cls.type === "dance";
   const r = calcStudent(cells);
 
   const downloadPdf = async () => {
     setBusy(true);
     try {
-      const { blob, filename } = await generateStudentReportPdf(st, cells);
+      const gen = isDance ? generateDanceReportPdf : generateStudentReportPdf;
+      const { blob, filename } = await gen(st, cells);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -75,7 +78,9 @@ export default function StudentReport() {
       </div>
 
       <div className="report-head">
-        <div className="report-eyebrow">MRS. M. McGUIRE • COOPERATIVE EDUCATION</div>
+        <div className="report-eyebrow">
+          {isDance ? "MRS. M. McGUIRE • DANCE (ATC20)" : "MRS. M. McGUIRE • COOPERATIVE EDUCATION"}
+        </div>
         <h1>{st.name}</h1>
         <div className="report-sub">
           John Paul II Catholic Secondary School • Grade Report
@@ -83,6 +88,10 @@ export default function StudentReport() {
         </div>
       </div>
 
+      {isDance ? (
+        <DanceReportBody st={st} cells={cells} />
+      ) : (
+        <>
       <div className="stats report-stats">
         <div className="stat"><div className="label">Midterm Mark</div><div className="value">{r.gtFinal === null ? "—" : `${fmtPct(r.gtFinal)} · ${pctToLevel(r.gtFinal)}`}</div></div>
         <div className="stat"><div className="label">Journals Avg</div><div className="value">{r.fjAvg === null ? "—" : `${fmtPct(r.fjAvg)} · ${r.fjLevel}`}</div></div>
@@ -149,6 +158,60 @@ export default function StudentReport() {
           <tr className="grand"><td>Final Mark</td><td /><td className="c">{r.fcFinal === null ? "—" : `${fmtPct(r.fcFinal)} (${r.fcLevel})`}</td></tr>
         </tfoot>
       </table>
+        </>
+      )}
     </div>
+  );
+}
+
+function DanceReportBody({ st, cells }) {
+  const r = calcDance(cells);
+  const val = (id) => {
+    const c = cells?.[id];
+    const e = effPct(c);
+    const lv = c?.lv ? String(c.lv).toUpperCase() : e !== null ? pctToLevel(e) : "";
+    return { lv, pc: e === null ? "" : fmtPct(e) };
+  };
+  const row = (label, v) => (
+    <tr key={label}><td colSpan={3}>{label}</td><td className="c">{v === null ? "—" : fmtPct(v)}</td></tr>
+  );
+  return (
+    <>
+      <div className="stats report-stats">
+        <div className="stat"><div className="label">Term Work (65%)</div><div className="value">{r.term === null ? "—" : `${fmtPct(r.term)} · ${pctToLevel(r.term)}`}</div></div>
+        <div className="stat"><div className="label">Att. &amp; Part. (15%)</div><div className="value">{r.ap === null ? "—" : `${fmtPct(r.ap)} · ${pctToLevel(r.ap)}`}</div></div>
+        <div className="stat"><div className="label">Current Mark</div><div className="value">{r.current === null ? "—" : `${fmtPct(r.current)} · ${pctToLevel(r.current)}`}</div></div>
+      </div>
+
+      <h2 className="report-h2">Dance Marking Sheet</h2>
+      <table className="report-table">
+        <thead>
+          <tr><th>Category</th><th>Assignment</th><th>Level</th><th>%</th></tr>
+        </thead>
+        <tbody>
+          {DANCE_GROUPS.flatMap((g) =>
+            g.cols.map((label, i) => {
+              const v = val(danceId(g.key, i));
+              return (
+                <tr key={`${g.key}.${i}`}>
+                  <td className="muted">{g.label} ({Math.round(g.weight * 100)}%)</td>
+                  <td>{label}{g.colWeights ? ` (${g.colWeights[i]}%)` : ""}</td>
+                  <td className="c">{v.lv}</td>
+                  <td className="c">{v.pc}</td>
+                </tr>
+              );
+            })
+          )}
+        </tbody>
+        <tfoot>
+          {row("Written Work (20%)", r.written)}
+          {row("Physical Assessments (45%)", r.physical)}
+          {row("Term Work (65%)", r.term)}
+          {row("Attendance & Participation (15%)", r.ap)}
+          {row("Final (20%)", r.fin)}
+          <tr className="grand"><td colSpan={3}>Current Mark</td><td className="c">{r.current === null ? "—" : `${fmtPct(r.current)} (${pctToLevel(r.current)})`}</td></tr>
+        </tfoot>
+      </table>
+    </>
   );
 }
