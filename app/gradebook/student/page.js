@@ -41,17 +41,34 @@ export default function StudentReport() {
   const isDance = cls.type === "dance";
   const r = calcStudent(cells);
 
+  const makePdf = async () => {
+    const gen = isDance ? generateDanceReportPdf : generateStudentReportPdf;
+    return gen(st, cells, cls.danceCourse);
+  };
+
   const downloadPdf = async () => {
     setBusy(true);
     try {
-      const gen = isDance ? generateDanceReportPdf : generateStudentReportPdf;
-      const { blob, filename } = await gen(st, cells, cls.danceCourse);
+      const { blob, filename } = await makePdf();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(`Sorry, the PDF didn't generate (${e.message}).`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // print the one-page PDF, so it always comes out on a single sheet
+  const printPdf = async () => {
+    setBusy(true);
+    try {
+      const { blob } = await makePdf();
+      window.open(URL.createObjectURL(blob), "_blank");
     } catch (e) {
       alert(`Sorry, the PDF didn't generate (${e.message}).`);
     } finally {
@@ -71,7 +88,7 @@ export default function StudentReport() {
       <div className="toolbar no-print">
         <Link className="btn" href="/gradebook">◀ Back to Gradebook</Link>
         <span className="spacer" />
-        <button className="btn" onClick={() => window.print()}>🖨 Print</button>
+        <button className="btn" disabled={busy} onClick={printPdf}>🖨 Print</button>
         <button className="btn primary" disabled={busy} onClick={downloadPdf}>
           {busy ? "…" : "⬇ Download PDF"}
         </button>

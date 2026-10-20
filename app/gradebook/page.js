@@ -173,6 +173,21 @@ export default function Gradebook() {
     setShowUpload(false);
   };
 
+  const exportAllReports = async () => {
+    try {
+      const { generateClassReportsPdf } = await import("../../lib/studentReportPdf");
+      const { blob, filename } = await generateClassReportsPdf(cls);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(`Sorry, the reports didn't generate (${e.message}).`);
+    }
+  };
+
   const exportCsv = () => {
     const rows = isDance ? buildDanceCsv(cls, course) : buildCsv(cls, activeTab);
     const csv = rows
@@ -219,6 +234,7 @@ export default function Gradebook() {
         <button className="btn" onClick={() => setShowUpload(true)}>📄 Upload student list</button>
         <button className="btn" onClick={addStudent}>＋ Student</button>
         <button className="btn" onClick={exportCsv}>⬇ Export CSV</button>
+        <button className="btn" onClick={exportAllReports} title="One PDF with a one-page report for every student in this class">⬇ All Reports (PDF)</button>
         <button
           className={`btn sync-btn s-${sync.status}`}
           title={sync.message || ""}
