@@ -11,7 +11,7 @@ import {
   GT_GROUPS, GT_PP_IDS, FJ_WEEKS, FC_COLS,
   isValidLevel, levelToPct, effPct, parsePct, calcStudent, fmtPct, pctToLevel,
 } from "../../lib/coop";
-import { DANCE_GROUPS, DANCE_SECTIONS, danceId, calcDance } from "../../lib/dance";
+import { DANCE_COURSES, danceCourse, danceId, calcDance } from "../../lib/dance";
 
 const TABS = [
   { key: "gt", label: "Mid Term Marking Sheet" },
@@ -83,6 +83,7 @@ export default function Gradebook() {
 
   const cls = state.classes.find((c) => c.id === state.activeClassId) || state.classes[0];
   const isDance = cls.type === "dance";
+  const course = isDance ? danceCourse(cls) : null;
   const tabs = isDance ? DANCE_TABS : TABS;
   const activeTab = tabs.some((t) => t.key === tab) ? tab : tabs[0].key;
 
@@ -109,12 +110,19 @@ export default function Gradebook() {
     const name = prompt("Name for the new class (e.g. Coop AM 2026-27):");
     if (!name) return;
     const type = confirm(
-      "Which gradebook should this class use?\n\nOK = Co-op (Mid Term / Journals / Final)\nCancel = Dance (ATC20 marks breakdown)"
+      "Which gradebook should this class use?\n\nOK = Co-op (Mid Term / Journals / Final)\nCancel = Dance"
     ) ? "coop" : "dance";
+    let danceKey;
+    if (type === "dance") {
+      const codes = Object.keys(DANCE_COURSES);
+      const pick = prompt(`Which dance course? (${codes.join(", ")})`, codes[0]);
+      if (!pick) return;
+      danceKey = codes.find((c) => c.toLowerCase() === pick.trim().toLowerCase()) || codes[0];
+    }
     const id = Math.random().toString(36).slice(2, 10);
     setState((s) => ({
       ...s,
-      classes: [...s.classes, { id, name, type, students: [], cells: {} }],
+      classes: [...s.classes, { id, name, type, danceCourse: danceKey, students: [], cells: {} }],
       activeClassId: id,
     }));
   };
@@ -166,7 +174,7 @@ export default function Gradebook() {
   };
 
   const exportCsv = () => {
-    const rows = isDance ? buildDanceCsv(cls) : buildCsv(cls, activeTab);
+    const rows = isDance ? buildDanceCsv(cls, course) : buildCsv(cls, activeTab);
     const csv = rows
       .map((r) => r.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))
       .join("\n");
@@ -182,7 +190,7 @@ export default function Gradebook() {
   const results = Object.fromEntries(
     cls.students.map((st) => [
       st.id,
-      isDance ? calcDance(cls.cells?.[st.id]) : calcStudent(cls.cells?.[st.id]),
+      isDance ? calcDance(cls.cells?.[st.id], course) : calcStudent(cls.cells?.[st.id]),
     ])
   );
 
@@ -245,6 +253,7 @@ export default function Gradebook() {
         isDance ? (
           <DanceStudentView
             cls={cls}
+            course={course}
             results={results}
             setCell={setCell}
             idx={Math.min(studentIdx, cls.students.length - 1)}
@@ -260,7 +269,7 @@ export default function Gradebook() {
           />
         )
       ) : isDance ? (
-        <DanceTracker cls={cls} results={results} setCell={setCell} removeStudent={removeStudent} />
+        <DanceTracker cls={cls} course={course} results={results} setCell={setCell} removeStudent={removeStudent} />
       ) : activeTab === "gt" ? (
         <GradeTracker cls={cls} results={results} setCell={setCell} removeStudent={removeStudent} />
       ) : activeTab === "fj" ? (
@@ -967,21 +976,22 @@ function UploadModal({ onClose, onApply }) {
 
 // ---------- Dance (ATC20) marking sheet ----------
 
-function DanceTracker({ cls, results, setCell, removeStudent }) {
-  const groups = DANCE_GROUPS;
+function DanceTracker({ cls, course, results, setCell, removeStudent }) {
+  const groups = course.groups;
+  const storeKey = `megs-dn-collapsed-${course.code}`;
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window === "undefined") return {};
     try {
-      return JSON.parse(localStorage.getItem("megs-dn-collapsed")) || {};
+      return JSON.parse(localStorage.getItem(storeKey)) || {};
     } catch {
       return {};
     }
   });
   useEffect(() => {
     try {
-      localStorage.setItem("megs-dn-collapsed", JSON.stringify(collapsed));
+      localStorage.setItem(storeKey, JSON.stringify(collapsed));
     } catch {}
-  }, [collapsed]);
+  }, [collapsed, storeKey]);
 
   const isC = (k) => !!collapsed[k];
   const toggle = (k) => setCollapsed((c) => ({ ...c, [k]: !c[k] }));
@@ -1003,7 +1013,7 @@ function DanceTracker({ cls, results, setCell, removeStudent }) {
             <tr className="hr1">
               <th className="name-col" rowSpan={3}>Student</th>
               <th className="rowtype-col" rowSpan={3}></th>
-              {DANCE_SECTIONS.map((sec) => (
+              {course.sections.map((sec) => (
                 <th key={sec.label} className={sec.h} colSpan={sectionSpan(sec)}>{sec.label}</th>
               ))}
               <th className="h-purple" colSpan={2} rowSpan={2}>Averages</th>
@@ -1036,8 +1046,8 @@ function DanceTracker({ cls, results, setCell, removeStudent }) {
                   ))
                 )
               )}
-              <th className="sub h-purple-lt">Term Work (65%)</th>
-              <th className="sub h-purple-lt">Final (20%)</th>
+              <th className="sub h-purple-lt">{course.termLabel}</th>
+              <th className="sub h-purple-lt">{course.finLabel}</th>
             </tr>
           </thead>
           <tbody>
@@ -1102,7 +1112,7 @@ function DanceTracker({ cls, results, setCell, removeStudent }) {
   );
 }
 
-function DanceStudentView({ cls, results, setCell, idx, setIdx }) {
+function DanceStudentView({ cls, course, results, setCell, idx, setIdx }) {
   const st = cls.students[idx];
   if (!st) return null;
   const r = results[st.id];
@@ -1143,15 +1153,15 @@ function DanceStudentView({ cls, results, setCell, idx, setIdx }) {
       </div>
 
       <div className="stats sv-stats">
-        {stat("Term Work (65%)", r.term)}
-        {stat("Att. & Part. (15%)", r.ap)}
-        {stat("Final (20%)", r.fin)}
+        {stat(course.termLabel, r.term)}
+        {stat(course.apLabel, r.ap)}
+        {stat(course.finLabel, r.fin)}
         {stat("Current Mark", r.current)}
       </div>
 
       <p className="hint sv-hint">Type a <strong>level</strong> (4+, 3, R …) in the first box <em>or</em> a <strong>percent</strong> in the second — the value on the right is what counts.</p>
 
-      {DANCE_GROUPS.map((g) => (
+      {course.groups.map((g) => (
         <section key={g.key} className={`sv-section t-${g.theme}`}>
           <h3>{g.label} ({Math.round(g.weight * 100)}%)</h3>
           {g.cols.map((label, i) => (
@@ -1167,24 +1177,25 @@ function DanceStudentView({ cls, results, setCell, idx, setIdx }) {
   );
 }
 
-function buildDanceCsv(cls) {
+function buildDanceCsv(cls, course) {
   const rows = [];
-  const colIds = DANCE_GROUPS.flatMap((g) => g.cols.map((_, i) => danceId(g.key, i)));
-  const labels = DANCE_GROUPS.flatMap((g) => g.cols.map((c) => `${g.label}: ${c}`));
+  const groups = course.groups;
+  const colIds = groups.flatMap((g) => g.cols.map((_, i) => danceId(g.key, i)));
+  const labels = groups.flatMap((g) => g.cols.map((c) => `${g.label}: ${c}`));
   rows.push([
     "Student", ...labels,
-    ...DANCE_GROUPS.map((g) => `${g.label} Avg (${Math.round(g.weight * 100)}%)`),
-    "Term Work (65%)", "Current Mark %", "Current Level",
+    ...groups.map((g) => `${g.label} Avg (${Math.round(g.weight * 100)}%)`),
+    course.termLabel, "Current Mark %", "Current Level",
   ]);
   for (const st of cls.students) {
-    const r = calcDance(cls.cells?.[st.id]);
+    const r = calcDance(cls.cells?.[st.id], course);
     rows.push([
       st.name,
       ...colIds.map((id) => {
         const v = effPct(cls.cells?.[st.id]?.[id]);
         return v === null ? "" : v.toFixed(1);
       }),
-      ...DANCE_GROUPS.map((g) => (r.groupAvg[g.key] === null ? "" : r.groupAvg[g.key].toFixed(1))),
+      ...groups.map((g) => (r.groupAvg[g.key] === null ? "" : r.groupAvg[g.key].toFixed(1))),
       r.term === null ? "" : r.term.toFixed(1),
       r.current === null ? "" : r.current.toFixed(1),
       r.current === null ? "" : pctToLevel(r.current),

@@ -7,7 +7,7 @@ import { syncLoad } from "../../../lib/sync";
 import {
   GT_GROUPS, FJ_WEEKS, FC_COLS, effPct, calcStudent, fmtPct, pctToLevel,
 } from "../../../lib/coop";
-import { DANCE_GROUPS, danceId, calcDance } from "../../../lib/dance";
+import { danceCourse, danceId, calcDance } from "../../../lib/dance";
 import { generateStudentReportPdf, generateDanceReportPdf } from "../../../lib/studentReportPdf";
 
 export default function StudentReport() {
@@ -45,7 +45,7 @@ export default function StudentReport() {
     setBusy(true);
     try {
       const gen = isDance ? generateDanceReportPdf : generateStudentReportPdf;
-      const { blob, filename } = await gen(st, cells);
+      const { blob, filename } = await gen(st, cells, cls.danceCourse);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -79,7 +79,7 @@ export default function StudentReport() {
 
       <div className="report-head">
         <div className="report-eyebrow">
-          {isDance ? "MRS. M. McGUIRE • DANCE (ATC20)" : "MRS. M. McGUIRE • COOPERATIVE EDUCATION"}
+          {isDance ? `MRS. M. McGUIRE • DANCE (${danceCourse(cls).code})` : "MRS. M. McGUIRE • COOPERATIVE EDUCATION"}
         </div>
         <h1>{st.name}</h1>
         <div className="report-sub">
@@ -89,7 +89,7 @@ export default function StudentReport() {
       </div>
 
       {isDance ? (
-        <DanceReportBody st={st} cells={cells} />
+        <DanceReportBody st={st} cells={cells} course={danceCourse(cls)} />
       ) : (
         <>
       <div className="stats report-stats">
@@ -164,8 +164,8 @@ export default function StudentReport() {
   );
 }
 
-function DanceReportBody({ st, cells }) {
-  const r = calcDance(cells);
+function DanceReportBody({ st, cells, course }) {
+  const r = calcDance(cells, course);
   const val = (id) => {
     const c = cells?.[id];
     const e = effPct(c);
@@ -178,8 +178,8 @@ function DanceReportBody({ st, cells }) {
   return (
     <>
       <div className="stats report-stats">
-        <div className="stat"><div className="label">Term Work (65%)</div><div className="value">{r.term === null ? "—" : `${fmtPct(r.term)} · ${pctToLevel(r.term)}`}</div></div>
-        <div className="stat"><div className="label">Att. &amp; Part. (15%)</div><div className="value">{r.ap === null ? "—" : `${fmtPct(r.ap)} · ${pctToLevel(r.ap)}`}</div></div>
+        <div className="stat"><div className="label">{course.termLabel}</div><div className="value">{r.term === null ? "—" : `${fmtPct(r.term)} · ${pctToLevel(r.term)}`}</div></div>
+        <div className="stat"><div className="label">{course.apLabel}</div><div className="value">{r.ap === null ? "—" : `${fmtPct(r.ap)} · ${pctToLevel(r.ap)}`}</div></div>
         <div className="stat"><div className="label">Current Mark</div><div className="value">{r.current === null ? "—" : `${fmtPct(r.current)} · ${pctToLevel(r.current)}`}</div></div>
       </div>
 
@@ -189,7 +189,7 @@ function DanceReportBody({ st, cells }) {
           <tr><th>Category</th><th>Assignment</th><th>Level</th><th>%</th></tr>
         </thead>
         <tbody>
-          {DANCE_GROUPS.flatMap((g) =>
+          {course.groups.flatMap((g) =>
             g.cols.map((label, i) => {
               const v = val(danceId(g.key, i));
               return (
@@ -204,11 +204,7 @@ function DanceReportBody({ st, cells }) {
           )}
         </tbody>
         <tfoot>
-          {row("Written Work (20%)", r.written)}
-          {row("Physical Assessments (45%)", r.physical)}
-          {row("Term Work (65%)", r.term)}
-          {row("Attendance & Participation (15%)", r.ap)}
-          {row("Final (20%)", r.fin)}
+          {r.summary.map((srow) => row(srow.label, srow.value))}
           <tr className="grand"><td colSpan={3}>Current Mark</td><td className="c">{r.current === null ? "—" : `${fmtPct(r.current)} (${pctToLevel(r.current)})`}</td></tr>
         </tfoot>
       </table>
